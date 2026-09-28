@@ -55,3 +55,23 @@ Format:
 **Context:** T1 asks for a stub `/api/health` and an empty layout; T3 and T9 fill them in.
 **Decision:** The stub returns `{"status":"ok"}`. The template's `Error` and `NotFound` pages, `ReconnectModal` and the `#blazor-error-ui` bar stay (Bootstrap classes removed); T9 restyles them.
 **Why:** They are framework plumbing, not demo pages, and removing them would leave errors and reconnects with no UI.
+
+## 2026-09-28 · T2 · Table names
+**Context:** The spec names the tables Project, Conversation, Message, Model and AppSettings but doesn't say whether that is the SQL name.
+**Decision:** EF Core's convention: tables are named after the `DbSet` properties (`Projects`, `Conversations`, `Messages`, `Models`, `AppSettings`). Entities keep the spec's singular names; the settings row class is `AppSetting`.
+**Why:** No mapping code, and the settings table gets exactly the spec's name.
+
+## 2026-09-28 · T2 · Roles and the General id
+**Context:** `System` is a reserved message role; the General id is to be "a constant".
+**Decision:** `MessageRole` has only `User` and `Assistant`. `ProjectIds.General` is `static readonly`.
+**Why:** Roles are stored as strings, so adding `System` later needs no migration. C# has no `const Guid`.
+
+## 2026-09-28 · T2 · Startup order and seeding location
+**Context:** The spec lists the seeding steps but not where they run, and T2 needs the `Ollama.BaseUrl` row before `SettingsService` exists in full (T3).
+**Decision:** `Program.cs` awaits `Seed.RunAsync` after `Build()` and before the app starts listening. `SettingsService.SeedAsync` inserts the `Ollama.BaseUrl` row, so only `SettingsService` touches that table even during seeding. The stale-`Streaming` fix runs right after the seed data, ahead of the model sync (T4), so it never depends on Ollama.
+**Why:** No request can arrive before the database is ready, and the table rule holds from the first commit.
+
+## 2026-09-28 · T2 · Injected clock and repo-local EF tool
+**Context:** Services set `CreatedAt` and `UpdatedAt`; migrations need `dotnet ef`.
+**Decision:** Services take `TimeProvider` (registered as `TimeProvider.System`) instead of calling `DateTime.UtcNow`. `dotnet-ef` 10.0.12 is pinned in the repo's tool manifest (`dotnet-tools.json`); run `dotnet tool restore` after cloning.
+**Why:** Tests can control time where ordering matters, and the EF tool version matches EF Core on any machine.

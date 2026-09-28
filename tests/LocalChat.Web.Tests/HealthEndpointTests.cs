@@ -1,10 +1,9 @@
 using System.Net;
-using Microsoft.AspNetCore.Mvc.Testing;
+using LocalChat.Web.Tests.Infrastructure;
 
 namespace LocalChat.Web.Tests;
 
-public sealed class HealthEndpointTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>
+public sealed class HealthEndpointTests(LocalChatWebFactory factory) : IClassFixture<LocalChatWebFactory>
 {
     [Fact]
     public async Task Health_returns_json()
