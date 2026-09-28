@@ -27,6 +27,7 @@ public sealed record FakeOllamaModel(
 public sealed class FakeOllama : HttpMessageHandler
 {
     private readonly ConcurrentQueue<Uri> _requests = new();
+    private readonly ConcurrentQueue<JsonElement> _chatRequests = new();
 
     public FakeOllamaState State { get; set; } = FakeOllamaState.Running;
     public string Version { get; set; } = "0.34.4";
@@ -34,6 +35,13 @@ public sealed class FakeOllama : HttpMessageHandler
 
     /// <summary>Every request URI, oldest first.</summary>
     public IReadOnlyCollection<Uri> Requests => _requests;
+
+    /// <summary>The body of every <c>/api/chat</c> request, oldest first.</summary>
+    public IReadOnlyCollection<JsonElement> ChatRequests => _chatRequests;
+
+    /// <summary>What <c>/api/chat</c> streams, one chunk per line, then a final line with <see cref="ChatEvalCount"/>.</summary>
+    public List<string> ChatChunks { get; } = ["Bonjour", " !"];
+    public int ChatEvalCount { get; set; } = 7;
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
@@ -60,6 +68,44 @@ public sealed class FakeOllama : HttpMessageHandler
         if (path.EndsWith("/api/tags", StringComparison.Ordinal))
         {
             return Json(new { models = Models.Select(ToTagsEntry) });
+        }
+
+        if (path.EndsWith("/api/chat", StringComparison.Ordinal))
+        {
+            var body = (await request.Content!.ReadFromJsonAsync<JsonElement>(cancellationToken)).Clone();
+            _chatRequests.Enqueue(body);
+            var model = body.GetProperty("model").GetString();
+            var stream = !body.TryGetProperty("stream", out var streamFlag) || streamFlag.ValueKind != JsonValueKind.False;
+            var done = new Dictionary<string, object?>
+            {
+                ["model"] = model,
+                ["created_at"] = "2026-09-28T12:00:00Z",
+                ["message"] = new { role = "assistant", content = stream ? "" : string.Concat(ChatChunks) },
+                ["done"] = true,
+                ["done_reason"] = "stop",
+                ["total_duration"] = 1_000_000,
+                ["prompt_eval_count"] = 12,
+                ["eval_count"] = ChatEvalCount,
+                ["eval_duration"] = 500_000,
+            };
+            if (!stream)
+            {
+                return Json(done);
+            }
+
+            var lines = ChatChunks
+                .Select(chunk => JsonSerializer.Serialize(new
+                {
+                    model,
+                    created_at = "2026-09-28T12:00:00Z",
+                    message = new { role = "assistant", content = chunk },
+                    done = false,
+                }))
+                .Append(JsonSerializer.Serialize(done));
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(string.Join("\n", lines) + "\n", System.Text.Encoding.UTF8, "application/x-ndjson"),
+            };
         }
 
         if (path.EndsWith("/api/show", StringComparison.Ordinal))

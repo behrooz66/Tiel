@@ -135,3 +135,18 @@ Format:
 **Context:** The spec defines the assembly and trimming rules but not the builder's inputs or a few edge cases.
 **Decision:** `PromptBuilder.Build` takes the project instructions, the conversation's system prompt, all messages in sequence order and the context length. The last user message is the one being answered, and anything after it (the new streaming reply) is ignored, so send and retry share one path. Instructions and system prompt are trimmed before joining, and a whitespace-only message counts as empty. The result reports the dropped count, the estimate and the budget; `ExceedsBudget` tells the caller to log the warning, keeping the builder pure.
 **Why:** One input shape covers both turn types, and logging stays out of the pure function.
+
+## 2026-09-28 · T8 · A generation is released when its reply settles, before the title
+**Context:** The lifecycle removes the generation from the registry in the final `finally`, after title generation, which can take up to 20 seconds. Until then `IsGenerating` stays true and a new send throws `ConflictException`.
+**Decision:** The registry entry is removed as soon as the reply is saved and `GenerationCompleted` (or `GenerationFailed`) is published, still in a `finally`. The subscriber channels stay open until title generation ends, so `TitleGenerated` still reaches them, and they are completed in the outer `finally`. The events and their order are unchanged. The title is saved only if the chat is still called `New chat` at that moment, and the rename bumps `UpdatedAt`.
+**Why:** The user can send the next message as soon as the answer is complete; a slow title call never blocks the chat.
+
+## 2026-09-28 · T8 · Shutdown, stop and failure details
+**Context:** The spec gives the outcomes, not the mechanics.
+**Decision:** `ApplicationStopping` cancels every generation (and any title call). `GenerationService` is also a hosted service whose `StopAsync` waits for the cancelled replies to save. After a stop, any exception from the stream counts as the stop, since a cut connection can surface as an I/O error. A failed reply keeps the text it streamed; the bubble shows the `ErrorMessage`: "Ollama is unreachable: …", "Ollama returned an error: …", or a generic line with details in the log. Deleting a conversation or project stops its generations first; their final saves then update nothing. `SendAsync` stores the message trimmed and raises `ConversationsChanged` right away, since `UpdatedAt` moved. A retried reply takes the next free sequence number, which is the replaced reply's number.
+**Why:** Each reply ends in a definite state the UI can show, even at shutdown.
+
+## 2026-09-28 · T8 · `num_ctx`, and the title call uses the same context size
+**Context:** The spec asks to verify how OllamaSharp's `IChatClient` takes Ollama options.
+**Decision:** `ChatOptions.AddOllamaOption(OllamaOption.NumCtx, contextLength)` from OllamaSharp. A test records the `/api/chat` body and checks `options.num_ctx`. The title call sends the same `num_ctx` as the chat.
+**Why:** Ollama reloads a model when `num_ctx` changes; on a 4 GB card that would add seconds to every title and to the next reply.

@@ -29,6 +29,7 @@ public interface IConversationService
 public sealed class ConversationService(
     IDbContextFactory<AppDbContext> dbFactory,
     ISettingsService settings,
+    IGenerationService generation,
     ChangeNotifier notifier,
     TimeProvider time) : IConversationService
 {
@@ -136,7 +137,8 @@ public sealed class ConversationService(
         var projectId = await db.Conversations.Where(c => c.Id == id).Select(c => (Guid?)c.ProjectId).SingleOrDefaultAsync(ct)
             ?? throw NotFound();
 
-        // The database cascades the delete to the messages.
+        generation.Stop(id);
+        // The database cascades the delete to the messages. A stopped reply then saves into nothing.
         await db.Conversations.Where(c => c.Id == id).ExecuteDeleteAsync(ct);
         notifier.NotifyConversationsChanged(projectId);
     }
@@ -171,8 +173,8 @@ public sealed class ConversationService(
                 "ModelId", "No model is available. Install one in Ollama, then sync models in Settings.");
     }
 
-    private static ConversationDetail ToDetail(Conversation c, IReadOnlyList<MessageDto> messages) =>
-        new(c.Id, c.ProjectId, c.Title, c.ModelId, c.SystemPrompt, c.CreatedAt, c.UpdatedAt, IsGenerating: false, messages);
+    private ConversationDetail ToDetail(Conversation c, IReadOnlyList<MessageDto> messages) =>
+        new(c.Id, c.ProjectId, c.Title, c.ModelId, c.SystemPrompt, c.CreatedAt, c.UpdatedAt, generation.IsGenerating(c.Id), messages);
 
     private static NotFoundException NotFound() => new("The conversation does not exist.");
 }

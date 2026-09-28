@@ -22,6 +22,7 @@ public interface IProjectService
 
 public sealed class ProjectService(
     IDbContextFactory<AppDbContext> dbFactory,
+    IGenerationService generation,
     ChangeNotifier notifier,
     TimeProvider time) : IProjectService
 {
@@ -101,6 +102,11 @@ public sealed class ProjectService(
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
+        foreach (var conversationId in await db.Conversations.Where(c => c.ProjectId == id).Select(c => c.Id).ToListAsync(ct))
+        {
+            generation.Stop(conversationId);
+        }
+
         // The database cascades the delete to the project's conversations and their messages.
         if (await db.Projects.Where(p => p.Id == id).ExecuteDeleteAsync(ct) == 0)
         {

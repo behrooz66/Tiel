@@ -24,3 +24,5 @@ public record ConversationDetail(Guid Id, Guid ProjectId, string Title, Guid Mod
 
 public record MessageDto(Guid Id, int Sequence, MessageRole Role, string Content, MessageStatus Status,
     string? ErrorMessage, Guid? ModelId, int? TokenCount, DateTime CreatedAt);
+
+public record TurnStarted(MessageDto? UserMessage, MessageDto AssistantMessage);
