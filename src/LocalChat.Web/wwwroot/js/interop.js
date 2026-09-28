@@ -37,8 +37,12 @@ export function highlightCodeBlocks(container) {
     copy.textContent = 'Copy';
     copy.setAttribute('aria-label', 'Copy code');
     copy.addEventListener('click', async () => {
-      await copyText(code.innerText);
-      copy.textContent = 'Copied';
+      try {
+        await copyText(code.innerText);
+        copy.textContent = 'Copied';
+      } catch {
+        copy.textContent = "Couldn't copy";
+      }
       setTimeout(() => (copy.textContent = 'Copy'), 2000);
     });
     toolbar.append(label, copy);

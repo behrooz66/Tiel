@@ -1,0 +1,23 @@
+<FluentSelect TOption="ModelDto" TValue="ModelDto"
+              Items="Models"
+              Value="Current"
+              ValueChanged="OnValueChanged"
+              OptionText="m => m?.DisplayName ?? string.Empty"
+              OptionValueToString="m => m?.Id.ToString() ?? string.Empty"
+              Placeholder="Pick a model"
+              AriaLabel="Model"
+              Disabled="@(Disabled || Models.Count == 0)"
+              Width="220px" />
+
+@code {
+    /// <summary>The available models, by display name.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<ModelDto> Models { get; set; } = [];
+    [Parameter] public Guid? ModelId { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback<Guid> OnChanged { get; set; }
+
+    private ModelDto? Current => Models.FirstOrDefault(m => m.Id == ModelId);
+
+    private Task OnValueChanged(ModelDto? model) =>
+        model is not null && model.Id != ModelId ? OnChanged.InvokeAsync(model.Id) : Task.CompletedTask;
+}

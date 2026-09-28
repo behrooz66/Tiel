@@ -1,5 +1,6 @@
 using Bunit;
 using LocalChat.Web.Components.Layout;
+using LocalChat.Web.Components.Shared;
 using LocalChat.Web.Services;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 using Microsoft.AspNetCore.DataProtection;
@@ -37,6 +38,7 @@ public abstract class AppTestContext : BunitContext, IAsyncLifetime
         Services.AddSingleton<IDataProtectionProvider>(new EphemeralDataProtectionProvider());
         Services.AddScoped<ProtectedLocalStorage>();
         Services.AddScoped<ProjectContext>();
+        Services.AddScoped<Interop>();
         JSInterop.Mode = JSRuntimeMode.Loose;
     }
 

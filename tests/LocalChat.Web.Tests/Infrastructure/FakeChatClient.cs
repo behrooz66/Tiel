@@ -18,6 +18,9 @@ public sealed class FakeChatClient : IChatClient
     public bool Hang { get; set; }
     public long? OutputTokenCount { get; set; } = 3;
 
+    /// <summary>End the stream quietly when cancelled, as OllamaSharp does, instead of throwing.</summary>
+    public bool EndQuietlyOnCancel { get; set; }
+
     /// <summary>The reply to non-streaming calls (title generation).</summary>
     public string TitleReply { get; set; } = "Title: \"Greeting the assistant.\"";
     public Exception? TitleFailWith { get; set; }
@@ -36,8 +39,21 @@ public sealed class FakeChatClient : IChatClient
         StreamingRequests.Enqueue((messages.ToList(), options));
         if (Live is { } live)
         {
-            await foreach (var chunk in live.Reader.ReadAllAsync(cancellationToken))
+            while (true)
             {
+                string chunk;
+                try
+                {
+                    if (!await live.Reader.WaitToReadAsync(cancellationToken) || !live.Reader.TryRead(out chunk!))
+                    {
+                        break;
+                    }
+                }
+                catch (OperationCanceledException) when (EndQuietlyOnCancel)
+                {
+                    yield break;
+                }
+
                 yield return new ChatResponseUpdate(ChatRole.Assistant, chunk);
             }
         }

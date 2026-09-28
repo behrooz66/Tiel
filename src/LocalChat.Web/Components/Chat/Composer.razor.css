@@ -1,0 +1,33 @@
+.composer {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    padding: 10px 10px 10px 14px;
+    border: 1px solid var(--colorNeutralStroke1);
+    border-radius: 20px;
+    background: var(--colorNeutralBackground1);
+}
+
+.composer:focus-within {
+    border-color: var(--colorBrandStroke1);
+}
+
+/* Grows with its content up to about 10 lines, where supported (field-sizing). */
+.composer-input {
+    flex: 1;
+    min-height: 1.5em;
+    max-height: calc(10 * 1.5em);
+    padding: 4px 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--colorNeutralForeground1);
+    font: inherit;
+    line-height: 1.5;
+    resize: none;
+    field-sizing: content;
+}
+
+.composer-input:disabled {
+    cursor: not-allowed;
+}

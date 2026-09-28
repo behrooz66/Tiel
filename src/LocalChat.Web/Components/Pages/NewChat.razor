@@ -1,27 +1,54 @@
 @page "/p/{ProjectId:guid}"
 @inherits CancellableComponent
 @inject IProjectService Projects
+@inject IConversationService Conversations
+@inject IGenerationService Generation
+@inject IModelService ModelService
+@inject ISettingsService Settings
 @inject ProjectContext Context
+@inject NavigationManager Navigation
+@inject INotificationService Notifications
 
 <PageTitle>New chat · LocalChat</PageTitle>
 
-<div class="page">
-    <div class="page-narrow">
-        @if (_notFound)
-        {
+@if (_notFound)
+{
+    <div class="page">
+        <div class="page-narrow">
             <h1>Project not found</h1>
             <p>It may have been deleted. <a href="p/@ProjectIds.General">Go to General</a></p>
-        }
-        else if (_project is not null)
-        {
-            <h1>New chat</h1>
-            <p class="muted">In @_project.Name</p>
-        }
+        </div>
     </div>
-</div>
+}
+else if (_project is not null)
+{
+    <div class="chat">
+        <header class="chat-header">
+            <div class="chat-title"><h1>New chat</h1></div>
+            <ModelPicker Models="_models" ModelId="_modelId" OnChanged="id => _modelId = id" />
+        </header>
+
+        <div class="chat-body new-chat-empty">
+            <h2>What can I help with?</h2>
+            <p class="muted">In @_project.Name</p>
+            @if (_models.Count == 0)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Warning" Title="No model available">
+                    Install a model in Ollama, then <a href="settings">sync models in Settings</a>.
+                </FluentMessageBar>
+            }
+        </div>
+
+        <footer class="chat-footer">
+            <Composer Disabled="@(_modelId is null)" OnSend="StartAsync" />
+        </footer>
+    </div>
+}
 
 @code {
     private ProjectDto? _project;
+    private IReadOnlyList<ModelDto> _models = [];
+    private Guid? _modelId;
     private bool _notFound;
 
     [Parameter] public Guid ProjectId { get; set; }
@@ -38,6 +65,39 @@
         {
             _project = null;
             _notFound = true;
+            return;
         }
+
+        // Preset to the default model, or the first available one when the default is unset or unavailable.
+        _models = await ModelService.ListAsync(includeUnavailable: false, DisposeToken);
+        var defaultId = (await Settings.GetAsync(DisposeToken)).DefaultModelId;
+        _modelId = _models.FirstOrDefault(m => m.Id == defaultId)?.Id ?? _models.FirstOrDefault()?.Id;
+    }
+
+    // The first send creates the chat, starts the reply on the server and opens the chat, which picks up the stream.
+    private async Task<bool> StartAsync(string content)
+    {
+        ConversationDetail conversation;
+        try
+        {
+            conversation = await Conversations.CreateAsync(ProjectId, _modelId, DisposeToken);
+        }
+        catch (Exception ex) when (ex.IsServiceError())
+        {
+            await Notifications.ShowErrorAsync(ex);
+            return false;
+        }
+
+        try
+        {
+            await Generation.SendAsync(conversation.Id, content, _modelId, DisposeToken);
+        }
+        catch (Exception ex) when (ex.IsServiceError())
+        {
+            await Notifications.ShowErrorAsync(ex);
+        }
+
+        Navigation.NavigateTo($"c/{conversation.Id}");
+        return true;
     }
 }

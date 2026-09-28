@@ -12,6 +12,8 @@ public sealed class TitleServiceTests
     [InlineData("'Don't forget the milk'", "Don't forget the milk")]
     [InlineData("title: Planning a trip...", "Planning a trip")]
     [InlineData("   \n  ", "")]
+    [InlineData("`Reverse String Function`", "Reverse String Function")]
+    [InlineData("```python\ndef reverse(s):\n    return s[::-1]\n```", "")]
     public void Cleans_the_model_output(string raw, string expected)
     {
         Assert.Equal(expected, TitleService.Clean(raw));

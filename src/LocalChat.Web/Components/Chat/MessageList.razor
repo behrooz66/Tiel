@@ -1,0 +1,82 @@
+@implements IAsyncDisposable
+@inject Interop Js
+
+<div class="message-scroll" @ref="_scroller">
+    <div class="messages">
+        @for (var i = 0; i < Messages.Count; i++)
+        {
+            var message = Messages[i];
+            <MessageView @key="message.Id"
+                         Message="message"
+                         Content="@(message.Id == StreamingMessageId ? StreamingText : null)"
+                         IsLast="i == Messages.Count - 1"
+                         ModelName="@ModelNameOf(message)"
+                         OnRetry="OnRetry" />
+        }
+    </div>
+</div>
+
+@if (!_pinned)
+{
+    <button type="button" class="jump-to-latest" @onclick="JumpToLatestAsync">
+        <Icon Name="down" Size="16" /> Jump to latest
+    </button>
+}
+
+@code {
+    private ElementReference _scroller;
+    private DotNetObjectReference<MessageList>? _self;
+    private IJSObjectReference? _scrollTracking;
+    private bool _pinned = true;
+
+    [Parameter, EditorRequired] public IReadOnlyList<MessageDto> Messages { get; set; } = [];
+    [Parameter] public Guid? StreamingMessageId { get; set; }
+    [Parameter] public string? StreamingText { get; set; }
+    [Parameter] public IReadOnlyDictionary<Guid, string> ModelNames { get; set; } = new Dictionary<Guid, string>();
+    [Parameter] public EventCallback OnRetry { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _self = DotNetObjectReference.Create(this);
+            _scrollTracking = await Js.AttachScrollAsync(_scroller, _self);
+        }
+
+        // Stick to the bottom while the user hasn't scrolled up more than 80 px.
+        await Js.FollowIfPinnedAsync(_scroller);
+    }
+
+    [JSInvokable]
+    public Task OnPinnedChanged(bool pinned) => InvokeAsync(() =>
+    {
+        _pinned = pinned;
+        StateHasChanged();
+    });
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_scrollTracking is not null)
+        {
+            try
+            {
+                await _scrollTracking.InvokeVoidAsync("dispose");
+                await _scrollTracking.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+
+        _self?.Dispose();
+    }
+
+    private async Task JumpToLatestAsync()
+    {
+        _pinned = true;
+        await Js.ScrollToBottomAsync(_scroller);
+    }
+
+    private string? ModelNameOf(MessageDto message) =>
+        message.ModelId is { } id ? ModelNames.GetValueOrDefault(id) : null;
+}

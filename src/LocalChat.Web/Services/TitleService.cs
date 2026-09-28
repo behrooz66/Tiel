@@ -64,6 +64,12 @@ public sealed partial class TitleService(IOllamaClientProvider clients, ILogger<
     public static string Clean(string raw)
     {
         var line = raw.Split('\n').Select(l => l.Replace("*", "").Trim()).FirstOrDefault(l => l.Length > 0) ?? "";
+        if (line.StartsWith("```", StringComparison.Ordinal))
+        {
+            // Small models sometimes answer the message instead; a code block is not a title.
+            return "";
+        }
+
         if (line.StartsWith("Title:", StringComparison.OrdinalIgnoreCase))
         {
             line = line["Title:".Length..];

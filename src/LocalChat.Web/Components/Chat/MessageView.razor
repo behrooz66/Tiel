@@ -1,0 +1,106 @@
+@inject Interop Js
+
+<article @ref="_element" class="message @(IsUser ? "from-user" : "from-assistant") status-@Message.Status.ToString().ToLowerInvariant()">
+    @if (IsUser)
+    {
+        <div class="user-bubble">@Message.Content</div>
+    }
+    else if (Message.Status == MessageStatus.Error)
+    {
+        <div class="error-bubble" role="alert">
+            <div class="error-title">The reply failed</div>
+            <div>@Message.ErrorMessage</div>
+        </div>
+    }
+    else
+    {
+        @if (Text.Length > 0)
+        {
+            <div class="markdown">@Html</div>
+        }
+        @if (Message.Status == MessageStatus.Streaming)
+        {
+            <span class="typing" role="status" aria-label="Generating a reply"><span></span><span></span><span></span></span>
+        }
+    }
+
+    @if (!IsUser && Message.Status != MessageStatus.Streaming)
+    {
+        <div class="message-footer">
+            @if (Message.Status == MessageStatus.Cancelled)
+            {
+                <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Subtle">Stopped</FluentBadge>
+            }
+            @if (ModelName is not null)
+            {
+                <span class="model-name">@ModelName</span>
+            }
+            @if (IsLast && Message.Status is MessageStatus.Error or MessageStatus.Cancelled)
+            {
+                <FluentButton Appearance="ButtonAppearance.Outline" Size="ButtonSize.Small" OnClick="OnRetry">
+                    <Icon Name="retry" Size="14" /> Retry
+                </FluentButton>
+            }
+        </div>
+    }
+</article>
+
+@code {
+    private ElementReference _element;
+    private (MessageDto, string?, bool, string?)? _rendered;
+    private (string Text, MarkupString Html)? _markdown;
+    private (Guid, MessageStatus)? _highlighted;
+
+    [Parameter, EditorRequired] public MessageDto Message { get; set; } = null!;
+
+    /// <summary>The text so far, while this reply is streaming; otherwise the message's own content is shown.</summary>
+    [Parameter] public string? Content { get; set; }
+
+    /// <summary>Only the last message offers Retry.</summary>
+    [Parameter] public bool IsLast { get; set; }
+
+    [Parameter] public string? ModelName { get; set; }
+
+    [Parameter] public EventCallback OnRetry { get; set; }
+
+    private bool IsUser => Message.Role == MessageRole.User;
+
+    private string Text => Content ?? Message.Content;
+
+    private MarkupString Html
+    {
+        get
+        {
+            if (_markdown is not { } cached || cached.Text != Text)
+            {
+                _markdown = cached = (Text, MarkdownRenderer.ToHtml(Text));
+            }
+
+            return cached.Html;
+        }
+    }
+
+    // The list re-renders for every streamed chunk; the other messages skip it when nothing of theirs changed.
+    protected override bool ShouldRender()
+    {
+        var current = (Message, Content, IsLast, ModelName);
+        if (_rendered == current)
+        {
+            return false;
+        }
+
+        _rendered = current;
+        return true;
+    }
+
+    // Highlight only final replies, so streaming renders stay cheap.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!IsUser && Message.Status is MessageStatus.Complete or MessageStatus.Cancelled
+            && _highlighted != (Message.Id, Message.Status))
+        {
+            _highlighted = (Message.Id, Message.Status);
+            await Js.HighlightCodeBlocksAsync(_element);
+        }
+    }
+}

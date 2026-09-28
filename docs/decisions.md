@@ -170,3 +170,26 @@ Format:
 **Context:** Details the spec leaves to the implementation.
 **Decision:** One shared Fluent menu (Rename, Delete) opens next to the row's "…" button. Deleting a chat also asks for confirmation. Deleting the chat you are viewing goes to its project's new-chat page; when the current project disappears (here or in another tab), the sidebar switches to General. Relative times are "now", "5m", "3h", "2d", then a date; they refresh every minute. The project dialog passes its own `MessageCondition` to Fluent's inputs, because the default condition replaces any message with "This field is required". `NewChat` exists as a stub until T11 fills it in.
 **Why:** Keeps the sidebar consistent with the data in every tab, and works around a Fluent v5 behavior that hid our field errors.
+
+## 2026-09-28 · T11 · Rendering model output safely
+**Context:** Markdig with advanced extensions and `DisableHtml()`, with links in a new tab. Model output is untrusted text.
+**Decision:** Besides escaping raw HTML, `MarkdownRenderer` turns images into plain links and replaces any link target other than http, https or mailto with `#`. The code toolbar (language and Copy) is added by `interop.js` after a reply is final, inside each `<pre>`; a failed copy shows "Couldn't copy".
+**Why:** An image in a reply would make the browser fetch a URL of the model's choosing, breaking "send nothing anywhere"; a `javascript:` link would run in the app's origin.
+
+## 2026-09-28 · T11 · Chat view mechanics
+**Context:** How the live view, composer and messages behave in detail.
+**Decision:**
+- The chat page subscribes after loading. It also re-checks on `ConversationsChanged`, which follows renames and deletes from other tabs and picks up a reply started in another tab.
+- Deltas re-render through a throttle (at most every 50 ms), and messages whose parameters didn't change skip rendering.
+- Each assistant message shows the display name of the model that wrote it.
+- The composer is a plain `<textarea>` that grows with CSS `field-sizing: content`, up to about 10 lines, where the browser supports it; elsewhere it scrolls. Send and Stop are icon buttons with `aria-label`s.
+- The per-chat system prompt has a service method but no UI, because the spec's UI doesn't include an editor.
+**Why:** Stays within the four allowed JavaScript uses and keeps streaming renders cheap.
+
+## 2026-09-28 · T11 · Fixes found by running against real Ollama
+**Context:** End-to-end runs with phi4-mini and qwen3.5:4b turned up behaviors the fakes didn't have.
+**Decision:**
+- When the token is cancelled, OllamaSharp's stream ends quietly instead of throwing. `GenerationService` now checks the token after the stream, so a stop is saved as `Cancelled` rather than as a short `Complete` reply that then gets a title. A fake mode that ends quietly on cancel covers it.
+- A small model sometimes answers the title prompt with a code block. The title cleaner now treats a first line starting with ```` ``` ```` as no title, so the fallback applies.
+- An HTTP error status from Ollama no longer reads "Ollama is unreachable". A 404 says the model isn't installed; other statuses show the code.
+**Why:** Each was a visible wrong result in the real app.

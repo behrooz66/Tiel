@@ -1,0 +1,391 @@
+@page "/c/{ConversationId:guid}"
+@inherits CancellableComponent
+@inject IConversationService Conversations
+@inject IGenerationService Generation
+@inject IModelService ModelService
+@inject ChangeNotifier Changes
+@inject ProjectContext Context
+@inject NavigationManager Navigation
+@inject INotificationService Notifications
+@inject TimeProvider Time
+
+<PageTitle>@(_conversation?.Title ?? "Chat") · LocalChat</PageTitle>
+
+@if (_notFound)
+{
+    <div class="page">
+        <div class="page-narrow">
+            <h1>Chat not found</h1>
+            <p>It may have been deleted. <a href="">Back to your chats</a></p>
+        </div>
+    </div>
+}
+else if (_conversation is { } conversation)
+{
+    <div class="chat">
+        <header class="chat-header">
+            <div class="chat-title">
+                @if (_renaming)
+                {
+                    <InlineRename Value="@conversation.Title" AriaLabel="Chat title" MaxLength="200"
+                                  OnSave="RenameAsync" OnCancel="() => _renaming = false" />
+                }
+                else
+                {
+                    <button type="button" class="title-button" title="Click to rename" @onclick="() => _renaming = true">
+                        <h1>@conversation.Title</h1>
+                    </button>
+                }
+            </div>
+            <ModelPicker Models="AvailableModels" ModelId="conversation.ModelId" Disabled="_live" OnChanged="SwitchModelAsync" />
+        </header>
+
+        @if (CurrentModel is { IsAvailable: false } missing)
+        {
+            <div class="chat-banner">
+                <FluentMessageBar Intent="MessageBarIntent.Warning" Title="Model unavailable">
+                    @missing.DisplayName is no longer installed in Ollama. Pick another model to keep chatting.
+                </FluentMessageBar>
+            </div>
+        }
+
+        <div class="chat-body">
+            <MessageList Messages="_messages" StreamingMessageId="_streamingId" StreamingText="@_streamingText.ToString()"
+                         ModelNames="_modelNames" OnRetry="RetryAsync" />
+        </div>
+
+        <footer class="chat-footer">
+            @if (_trimmed > 0)
+            {
+                <p class="trim-note">@TrimmedNote(_trimmed)</p>
+            }
+            <Composer IsGenerating="_live" Disabled="@(CurrentModel is not { IsAvailable: true })" OnSend="SendAsync" OnStop="Stop" />
+        </footer>
+    </div>
+}
+
+@code {
+    private readonly System.Text.StringBuilder _streamingText = new();
+    private ConversationDetail? _conversation;
+    private List<MessageDto> _messages = [];
+    private IReadOnlyList<ModelDto> _models = [];
+    private Dictionary<Guid, string> _modelNames = [];
+    private GenerationSubscription? _subscription;
+    private RenderThrottle? _throttle;
+    private Guid? _streamingId;
+    private Guid _loadedId;
+    private bool _live;
+    private bool _busy;
+    private bool _notFound;
+    private bool _renaming;
+    private int _trimmed;
+
+    [Parameter] public Guid ConversationId { get; set; }
+
+    private IReadOnlyList<ModelDto> AvailableModels => _models.Where(m => m.IsAvailable).ToList();
+
+    private ModelDto? CurrentModel => _models.FirstOrDefault(m => m.Id == _conversation?.ModelId);
+
+    protected override void OnInitialized()
+    {
+        _throttle = new RenderThrottle(Time, () => InvokeAsync(() =>
+        {
+            if (!IsDisposed)
+            {
+                StateHasChanged();
+            }
+        }));
+        Changes.ConversationsChanged += OnConversationsChanged;
+    }
+
+    // The same component shows another chat when the route changes, so reset everything here.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == ConversationId)
+        {
+            return;
+        }
+
+        _loadedId = ConversationId;
+        EndLiveView();
+        _renaming = false;
+        _trimmed = 0;
+        _notFound = false;
+        await LoadAsync();
+    }
+
+    protected override void OnDispose()
+    {
+        Changes.ConversationsChanged -= OnConversationsChanged;
+        _subscription?.Dispose();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            var detail = await Conversations.GetAsync(ConversationId, DisposeToken);
+            await LoadModelsAsync();
+            _conversation = detail;
+            _messages = [.. detail.Messages];
+            await Context.SetAsync(detail.ProjectId);
+        }
+        catch (NotFoundException)
+        {
+            _conversation = null;
+            _notFound = true;
+            return;
+        }
+
+        // A reply may be running (after a reload, or coming back to this chat): show its text so far and follow it.
+        Subscribe();
+        if (!_live && _messages.Any(m => m.Status == MessageStatus.Streaming))
+        {
+            // It finished between loading and subscribing.
+            await ReloadMessagesAsync();
+        }
+    }
+
+    private async Task<bool> SendAsync(string content)
+    {
+        if (_conversation is null)
+        {
+            return false;
+        }
+
+        _busy = true;
+        try
+        {
+            var turn = await Generation.SendAsync(ConversationId, content, _conversation.ModelId, DisposeToken);
+            BeginTurn(turn);
+            return true;
+        }
+        catch (Exception ex) when (ex.IsServiceError())
+        {
+            await Notifications.ShowErrorAsync(ex);
+            return false;
+        }
+        finally
+        {
+            _busy = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RetryAsync()
+    {
+        _busy = true;
+        try
+        {
+            var turn = await Generation.RetryAsync(ConversationId, DisposeToken);
+            // The failed or stopped reply is replaced by the new one.
+            _messages.RemoveAll(m => m.Sequence >= turn.AssistantMessage.Sequence);
+            BeginTurn(turn);
+        }
+        catch (Exception ex) when (ex.IsServiceError())
+        {
+            await Notifications.ShowErrorAsync(ex);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Stop() => Generation.Stop(ConversationId);
+
+    private void BeginTurn(TurnStarted turn)
+    {
+        AddOrReplace(turn.UserMessage);
+        AddOrReplace(turn.AssistantMessage);
+        _conversation = _conversation! with { ModelId = turn.AssistantMessage.ModelId ?? _conversation.ModelId };
+        _trimmed = 0;
+        Subscribe();
+        if (!_live)
+        {
+            // Already finished (a very fast reply): show the saved result.
+            _ = InvokeAsync(ReloadMessagesAsync);
+        }
+    }
+
+    private void Subscribe()
+    {
+        _subscription?.Dispose();
+        var conversationId = ConversationId;
+        _subscription = Generation.Subscribe(conversationId, e => OnGenerationEventAsync(conversationId, e));
+        if (_subscription.Snapshot is { } snapshot)
+        {
+            _live = true;
+            _streamingId = snapshot.AssistantMessageId;
+            _streamingText.Clear().Append(snapshot.Text);
+            _trimmed = snapshot.TrimmedMessages;
+        }
+        else
+        {
+            EndLiveView();
+        }
+    }
+
+    private void EndLiveView()
+    {
+        _subscription?.Dispose();
+        _subscription = null;
+        _live = false;
+        _streamingId = null;
+        _streamingText.Clear();
+    }
+
+    private Task OnGenerationEventAsync(Guid conversationId, GenerationEvent generationEvent) => InvokeAsync(() =>
+    {
+        if (IsDisposed || conversationId != ConversationId || _conversation is null)
+        {
+            return;
+        }
+
+        switch (generationEvent)
+        {
+            case GenerationStarted started:
+                _trimmed = started.TrimmedMessages;
+                AddOrReplace(started.UserMessage);
+                AddOrReplace(started.AssistantMessage);
+                _streamingId = started.AssistantMessage.Id;
+                StateHasChanged();
+                break;
+            case GenerationDelta delta:
+                _streamingText.Append(delta.Text);
+                _throttle!.Request();
+                break;
+            case GenerationCompleted completed:
+                Finish(completed.Message);
+                break;
+            case GenerationFailed failed:
+                Finish(failed.Message);
+                break;
+            case TitleGenerated titled:
+                _conversation = _conversation with { Title = titled.Title };
+                StateHasChanged();
+                break;
+        }
+    });
+
+    // The subscription stays open: a title may still follow.
+    private void Finish(MessageDto message)
+    {
+        AddOrReplace(message);
+        _live = false;
+        _streamingId = null;
+        _streamingText.Clear();
+        StateHasChanged();
+    }
+
+    private async Task RenameAsync(string title)
+    {
+        _renaming = false;
+        try
+        {
+            await Conversations.RenameAsync(ConversationId, title, DisposeToken);
+            _conversation = _conversation! with { Title = title.Trim() };
+        }
+        catch (Exception ex) when (ex.IsServiceError())
+        {
+            await Notifications.ShowErrorAsync(ex);
+        }
+    }
+
+    private async Task SwitchModelAsync(Guid modelId)
+    {
+        try
+        {
+            await Conversations.SetModelAsync(ConversationId, modelId, DisposeToken);
+            _conversation = _conversation! with { ModelId = modelId };
+        }
+        catch (Exception ex) when (ex.IsServiceError())
+        {
+            await Notifications.ShowErrorAsync(ex);
+        }
+    }
+
+    // Another tab (or the sidebar) changed a chat in this project: pick up renames, deletes and replies started elsewhere.
+    private void OnConversationsChanged(Guid projectId)
+    {
+        if (!_busy && projectId == _conversation?.ProjectId)
+        {
+            _ = InvokeAsync(RefreshAsync);
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        if (IsDisposed || _busy || _conversation is null)
+        {
+            return;
+        }
+
+        ConversationDetail detail;
+        try
+        {
+            detail = await Conversations.GetAsync(ConversationId, DisposeToken);
+            await LoadModelsAsync();
+        }
+        catch (NotFoundException)
+        {
+            Navigation.NavigateTo($"p/{_conversation.ProjectId}");
+            return;
+        }
+
+        _conversation = _conversation with { Title = detail.Title, ModelId = detail.ModelId, SystemPrompt = detail.SystemPrompt };
+        if (!_live)
+        {
+            _messages = [.. detail.Messages];
+            if (detail.IsGenerating)
+            {
+                Subscribe();
+            }
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task ReloadMessagesAsync()
+    {
+        try
+        {
+            var detail = await Conversations.GetAsync(ConversationId, DisposeToken);
+            _messages = [.. detail.Messages];
+            StateHasChanged();
+        }
+        catch (NotFoundException)
+        {
+            _notFound = true;
+        }
+    }
+
+    private async Task LoadModelsAsync()
+    {
+        _models = await ModelService.ListAsync(includeUnavailable: true, DisposeToken);
+        _modelNames = _models.ToDictionary(m => m.Id, m => m.DisplayName);
+    }
+
+    private void AddOrReplace(MessageDto? message)
+    {
+        if (message is null)
+        {
+            return;
+        }
+
+        var index = _messages.FindIndex(m => m.Id == message.Id);
+        if (index >= 0)
+        {
+            _messages[index] = message;
+        }
+        else
+        {
+            _messages.Add(message);
+            _messages.Sort((a, b) => a.Sequence.CompareTo(b.Sequence));
+        }
+    }
+
+    public static string TrimmedNote(int count) => count == 1
+        ? "1 earlier message is outside this model's context window."
+        : $"{count} earlier messages are outside this model's context window.";
+}

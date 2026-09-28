@@ -149,3 +149,100 @@ h1:focus {
     border-left: 3px solid var(--colorNeutralStroke1);
     color: var(--colorNeutralForeground2);
 }
+
+/* Chat layout, shared by the new-chat and chat pages. */
+
+.chat {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.chat-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.chat-title {
+    flex: 1;
+    min-width: 0;
+}
+
+.chat-title h1 {
+    margin: 0;
+    overflow: hidden;
+    font-size: var(--fontSizeBase400);
+    line-height: var(--lineHeightBase400);
+    font-weight: var(--fontWeightSemibold);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.title-button {
+    display: block;
+    max-width: 100%;
+    padding: 2px 6px;
+    margin-left: -6px;
+    border: none;
+    border-radius: var(--borderRadiusMedium);
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: text;
+}
+
+.title-button:hover {
+    background: var(--colorSubtleBackgroundHover);
+}
+
+.chat-banner {
+    padding: 8px 20px 0;
+}
+
+.chat-body {
+    position: relative;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.new-chat-empty {
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 24px;
+    text-align: center;
+}
+
+.new-chat-empty h2 {
+    margin: 0;
+}
+
+.chat-footer {
+    width: 100%;
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 8px 20px 16px;
+}
+
+.trim-note {
+    margin: 0 0 6px;
+    color: var(--colorNeutralForeground3);
+    font-size: var(--fontSizeBase200);
+    text-align: center;
+}
+
+@media (max-width: 767.98px) {
+    .chat-header {
+        padding: 8px 12px;
+    }
+
+    .chat-footer {
+        padding: 6px 10px 10px;
+    }
+}

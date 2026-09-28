@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using LocalChat.Web.Data;
 using LocalChat.Web.Data.Entities;
@@ -103,6 +104,24 @@ public sealed class GenerationServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Stop_counts_even_when_the_client_ends_the_stream_quietly_instead_of_throwing()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var live = Chat.GoLive();
+        Chat.EndQuietlyOnCancel = true;
+        var recorder = SubscribeFromTheStart(_conversation.Id);
+        await Generation.SendAsync(_conversation.Id, "Write an essay", null, ct);
+        await live.Writer.WriteAsync("Partial", ct);
+        await recorder.WaitForAsync<GenerationDelta>();
+
+        Generation.Stop(_conversation.Id);
+        await Generation.WhenIdleAsync();
+
+        Assert.Equal(MessageStatus.Cancelled, (await ReadMessagesAsync(ct))[^1].Status);
+        Assert.Empty(Chat.TitleRequests);
+    }
+
+    [Fact]
     public async Task Disposing_a_subscription_does_not_stop_the_generation()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -139,6 +158,20 @@ public sealed class GenerationServiceTests : IAsyncLifetime
         Assert.DoesNotContain(recorder.Events, e => e is GenerationCompleted or TitleGenerated);
         var saved = (await ReadMessagesAsync(ct))[^1];
         Assert.Equal((MessageStatus.Error, failed.ErrorMessage), (saved.Status, saved.ErrorMessage));
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound, "Ollama does not have this model. Install it in Ollama, or pick another model.")]
+    [InlineData(HttpStatusCode.InternalServerError, "Ollama returned an error (500 InternalServerError).")]
+    public async Task An_error_status_from_ollama_is_described_as_such_not_as_unreachable(HttpStatusCode status, string message)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        Chat.FailWith = new HttpRequestException("Response status code does not indicate success.", null, status);
+
+        await Generation.SendAsync(_conversation.Id, "Hello", null, ct);
+        await Generation.WhenIdleAsync();
+
+        Assert.Equal(message, (await ReadMessagesAsync(ct))[^1].ErrorMessage);
     }
 
     [Fact]

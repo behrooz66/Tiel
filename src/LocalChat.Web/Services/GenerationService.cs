@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
@@ -274,6 +275,8 @@ public sealed class GenerationService : IGenerationService, IHostedService
                     }
                 }
 
+                // OllamaSharp ends the stream quietly when cancelled, instead of throwing: that is still a stop.
+                token.ThrowIfCancellationRequested();
                 completed = await SaveFinalAsync(assistant, TextOf(generation), MessageStatus.Complete, null, (int?)outputTokens);
                 Publish(generation, new GenerationCompleted(completed));
                 _notifier.NotifyConversationsChanged(projectId);
@@ -452,6 +455,9 @@ public sealed class GenerationService : IGenerationService, IHostedService
     /// <summary>A short, human-readable reason for the message bubble. The full exception goes to the log.</summary>
     private static string Describe(Exception exception) => exception switch
     {
+        HttpRequestException { StatusCode: HttpStatusCode.NotFound } =>
+            "Ollama does not have this model. Install it in Ollama, or pick another model.",
+        HttpRequestException { StatusCode: { } status } => $"Ollama returned an error ({(int)status} {status}).",
         HttpRequestException => $"Ollama is unreachable: {exception.Message}",
         TaskCanceledException { InnerException: TimeoutException } => "Ollama did not respond in time.",
         OllamaException => $"Ollama returned an error: {exception.Message}",
