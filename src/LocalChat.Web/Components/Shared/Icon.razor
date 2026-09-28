@@ -1,0 +1,42 @@
+@* Simple line icons drawn in currentColor. Decorative: the button or link around them carries the label. *@
+<svg class="icon" width="@Size" height="@Size" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+    @switch (Name)
+    {
+        case "menu":
+            <path d="M4 6h16M4 12h16M4 18h16" />
+            break;
+        case "more":
+            <circle cx="5" cy="12" r="1.2" fill="currentColor" /><circle cx="12" cy="12" r="1.2" fill="currentColor" /><circle cx="19" cy="12" r="1.2" fill="currentColor" />
+            break;
+        case "plus":
+            <path d="M12 5v14M5 12h14" />
+            break;
+        case "send":
+            <path d="M12 19V5M5 12l7-7 7 7" />
+            break;
+        case "stop":
+            <rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor" />
+            break;
+        case "down":
+            <path d="M12 5v14M5 12l7 7 7-7" />
+            break;
+        case "close":
+            <path d="M6 6l12 12M18 6L6 18" />
+            break;
+        case "settings":
+            <circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" />
+            break;
+        case "folder":
+            <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+            break;
+        case "retry":
+            <path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4" />
+            break;
+    }
+</svg>
+
+@code {
+    [Parameter, EditorRequired] public string Name { get; set; } = "";
+    [Parameter] public int Size { get; set; } = 20;
+}

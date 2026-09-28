@@ -1,0 +1,77 @@
+@implements IDisposable
+@inject IHealthService Health
+@inject ISettingsService Settings
+@inject TimeProvider Time
+
+<span class="health @StateClass" role="img" aria-label="@Label" title="@Label"></span>
+
+@code {
+    public static readonly TimeSpan Interval = TimeSpan.FromSeconds(30);
+
+    private readonly CancellationTokenSource _disposed = new();
+    private PeriodicTimer? _timer;
+    private HealthStatus? _status;
+
+    private string StateClass => _status switch
+    {
+        null => "unknown",
+        { OllamaReachable: true } => "up",
+        _ => "down",
+    };
+
+    private string Label => _status switch
+    {
+        null => "Checking Ollama…",
+        { OllamaReachable: true } s => $"Ollama {s.OllamaVersion} is running at {s.OllamaBaseUrl}",
+        { } s => $"Ollama is unreachable at {s.OllamaBaseUrl}",
+    };
+
+    protected override void OnInitialized()
+    {
+        Settings.SettingsChanged += OnSettingsChanged;
+        _timer = new PeriodicTimer(Interval, Time);
+        _ = PollAsync(_timer);
+    }
+
+    public void Dispose()
+    {
+        Settings.SettingsChanged -= OnSettingsChanged;
+        _disposed.Cancel();
+        _timer?.Dispose();
+    }
+
+    private async Task PollAsync(PeriodicTimer timer)
+    {
+        try
+        {
+            do
+            {
+                await CheckAsync();
+            }
+            while (await timer.WaitForNextTickAsync(_disposed.Token));
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    // Re-check at once when the URL changes, so the indicator follows Settings without waiting 30 seconds.
+    private void OnSettingsChanged() => _ = CheckAsync();
+
+    private async Task CheckAsync()
+    {
+        try
+        {
+            // HealthService reports an unreachable Ollama in its result rather than throwing.
+            var status = await Health.CheckAsync(_disposed.Token);
+            await InvokeAsync(() =>
+            {
+                _status = status;
+                StateHasChanged();
+            });
+        }
+        catch (OperationCanceledException) when (_disposed.IsCancellationRequested)
+        {
+        }
+    }
+}

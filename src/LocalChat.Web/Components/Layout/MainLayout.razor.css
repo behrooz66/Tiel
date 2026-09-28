@@ -1,3 +1,86 @@
+.shell {
+    display: flex;
+    height: 100dvh;
+    overflow: hidden;
+}
+
+.sidebar {
+    flex: none;
+    width: 280px;
+    height: 100%;
+    background: var(--colorNeutralBackground2);
+    border-right: 1px solid var(--colorNeutralStroke2);
+}
+
+.main {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+    height: 100%;
+}
+
+.content {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.topbar,
+.scrim {
+    display: none;
+}
+
+.error-panel {
+    max-width: 560px;
+    margin: 64px auto;
+    padding: 0 24px;
+}
+
+/* Below 768 px the sidebar becomes a drawer behind a menu button. */
+@media (max-width: 767.98px) {
+    .sidebar {
+        position: fixed;
+        inset: 0 auto 0 0;
+        z-index: 20;
+        max-width: 85vw;
+        transform: translateX(-100%);
+        transition: transform 0.2s ease;
+    }
+
+    .drawer-open .sidebar {
+        transform: none;
+        box-shadow: var(--shadow16);
+    }
+
+    .drawer-open .scrim {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        background: rgba(0, 0, 0, 0.4);
+    }
+
+    .topbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--colorNeutralStroke2);
+    }
+
+    .topbar-title {
+        font-weight: var(--fontWeightSemibold);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sidebar {
+        transition: none;
+    }
+}
+
 #blazor-error-ui {
     color-scheme: light only;
     background: lightyellow;

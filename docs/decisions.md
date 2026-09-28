@@ -150,3 +150,13 @@ Format:
 **Context:** The spec asks to verify how OllamaSharp's `IChatClient` takes Ollama options.
 **Decision:** `ChatOptions.AddOllamaOption(OllamaOption.NumCtx, contextLength)` from OllamaSharp. A test records the `/api/chat` body and checks `options.num_ctx`. The title call sends the same `num_ctx` as the chat.
 **Why:** Ollama reloads a model when `num_ctx` changes; on a 4 GB card that would add seconds to every title and to the next reply.
+
+## 2026-09-28 · T9 · Theme, icons and assets
+**Context:** The spec asks for Fluent UI's OS-following theme, a vendored highlight.js and icon-only buttons with labels.
+**Decision:** Fluent UI v5 follows the OS theme by default and sets `body[data-theme="dark"]`; its default stylesheet colors `body`. The app's CSS uses the same design tokens (`--colorNeutralBackground1` and so on), plus Fluent's recommended inline style against a white flash in dark mode. highlight.js 11.12.0 (the `@highlightjs/cdn-assets` build, checked against npm's sha512) is vendored with its GitHub light and dark styles, picked by `prefers-color-scheme`. Icons are a small in-repo SVG component instead of the Fluent icons package.
+**Why:** No theme code or runtime downloads; a few simple icons don't justify a multi-megabyte package.
+
+## 2026-09-28 · T9 · Errors, toasts and JavaScript
+**Context:** "Service exceptions surface as toasts; an ErrorBoundary catches anything unexpected."
+**Decision:** Components catch only the four typed service exceptions (`IsServiceError()`) and show them with `INotificationService` error toasts. Anything else reaches Blazor's `ErrorBoundary` around the main area, which logs it and shows a calm panel with Try again; navigating also recovers. `wwwroot/js/interop.js` is one ES module with exactly the four allowed concerns. It inserts the code toolbar inside each `<pre>` so the nodes Blazor rendered stay in place. The reconnect dialog keeps the template's mechanics with shorter wording, and says that replies keep generating on the server.
+**Why:** Expected failures get a clear message; bugs aren't hidden behind a toast.

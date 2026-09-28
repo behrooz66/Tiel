@@ -1,0 +1,16 @@
+.health {
+    display: inline-block;
+    flex: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--colorNeutralForeground4);
+}
+
+.health.up {
+    background: var(--colorPaletteGreenForeground1);
+}
+
+.health.down {
+    background: var(--colorPaletteRedForeground1);
+}
