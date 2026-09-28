@@ -130,3 +130,8 @@ Format:
 **Context:** "The given one, else the default, else the first available" leaves open what happens when the given model is unavailable.
 **Decision:** A given model must exist and be available, or `CreateAsync` throws `ValidationException`. The fallbacks apply only when no model is given. Every model rule error is keyed `ModelId`. Lists sort by `UpdatedAt` newest first, then by id (time-ordered v7), so ties are stable. A rename, model change or system-prompt change that changes nothing is not saved and raises no event. `ConversationDetail.IsGenerating` and stopping a generation before a delete are wired in T8.
 **Why:** Silently swapping the model a user picked would be surprising; the other choices keep lists stable and events meaningful.
+
+## 2026-09-28 · T7 · Prompt builder inputs and edge cases
+**Context:** The spec defines the assembly and trimming rules but not the builder's inputs or a few edge cases.
+**Decision:** `PromptBuilder.Build` takes the project instructions, the conversation's system prompt, all messages in sequence order and the context length. The last user message is the one being answered, and anything after it (the new streaming reply) is ignored, so send and retry share one path. Instructions and system prompt are trimmed before joining, and a whitespace-only message counts as empty. The result reports the dropped count, the estimate and the budget; `ExceedsBudget` tells the caller to log the warning, keeping the builder pure.
+**Why:** One input shape covers both turn types, and logging stays out of the pure function.
