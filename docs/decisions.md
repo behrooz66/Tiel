@@ -193,3 +193,13 @@ Format:
 - A small model sometimes answers the title prompt with a code block. The title cleaner now treats a first line starting with ```` ``` ```` as no title, so the fallback applies.
 - An HTTP error status from Ollama no longer reads "Ollama is unreachable". A 404 says the model isn't installed; other statuses show the code.
 **Why:** Each was a visible wrong result in the real app.
+
+## 2026-09-28 · T12 · No FluentNumberInput, and a guard against CDN-loading components
+**Context:** A browser run of the Settings page showed a request to `https://unpkg.com/imask@7.6.1/dist/imask.min.js`: Fluent's `FluentNumberInput` lazy-loads its input-mask library from unpkg as soon as it renders.
+**Decision:** Context length uses a `FluentTextInput` of type Number, and the page parses a whole number before saving ("Enter a whole number." otherwise). `NoCdnTests` fails when a Razor file uses `FluentNumberInput`, `FluentSortableList` or `MaskPattern` (the components that fetch from unpkg), or links a script or stylesheet on another host. Browser runs of every page now report no host other than localhost.
+**Why:** "Send nothing anywhere except the configured Ollama endpoint" is a hard constraint, and the leak came from a library default rather than our code, so it needs a test to stay fixed.
+
+## 2026-09-28 · T12 · Settings page behavior
+**Context:** Details the spec leaves open.
+**Decision:** Test connection checks the typed URL without saving. Save stores it, runs the sync through `SetOllamaBaseUrlAsync`, then checks health once to say whether models were synced or Ollama isn't reachable there. The health indicator re-checks at once through `SettingsChanged`. Each model row has its own Save, enabled only when the row changed, with field errors inline. The default-model picker lists available models only.
+**Why:** Clear feedback for each action, and no half-saved rows.

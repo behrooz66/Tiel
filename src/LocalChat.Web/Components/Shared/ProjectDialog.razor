@@ -4,11 +4,11 @@
 <FluentDialogBody>
     <div class="project-form">
         <FluentTextInput Label="Name" @bind-Value="_name" Immediate="true" MaxLength="100" Width="100%"
-                         Autofocus="true" MessageCondition="ShowMessage" Message="@ErrorFor(nameof(ProjectInput.Name))" MessageState="@StateFor(nameof(ProjectInput.Name))" />
+                         Autofocus="true" MessageCondition="FieldMessages.WhenSet" Message="@ErrorFor(nameof(ProjectInput.Name))" MessageState="@StateFor(nameof(ProjectInput.Name))" />
         <FluentTextInput Label="Description" @bind-Value="_description" Immediate="true" MaxLength="500" Width="100%"
-                         MessageCondition="ShowMessage" Message="@ErrorFor(nameof(ProjectInput.Description))" MessageState="@StateFor(nameof(ProjectInput.Description))" />
+                         MessageCondition="FieldMessages.WhenSet" Message="@ErrorFor(nameof(ProjectInput.Description))" MessageState="@StateFor(nameof(ProjectInput.Description))" />
         <FluentTextArea Label="Instructions" @bind-Value="_instructions" Immediate="true" Width="100%" Height="180px"
-                        MessageCondition="ShowMessage" Message="@(ErrorFor(nameof(ProjectInput.Instructions)) ?? "Instructions apply to every chat in this project, sent as its system message.")"
+                        MessageCondition="FieldMessages.WhenSet" Message="@(ErrorFor(nameof(ProjectInput.Instructions)) ?? "Instructions apply to every chat in this project, sent as its system message.")"
                         MessageState="@StateFor(nameof(ProjectInput.Instructions))" />
     </div>
 </FluentDialogBody>
@@ -70,9 +70,6 @@
         // The click came from the dialog's footer, not from this component, so re-render explicitly.
         StateHasChanged();
     }
-
-    // Fluent's default condition for text inputs replaces the message with its own "required" text, so show ours as given.
-    private static readonly Func<IFluentField, bool> ShowMessage = field => field.Message is not null;
 
     private string? ErrorFor(string field) => _errors.GetValueOrDefault(field);
 

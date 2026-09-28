@@ -1,0 +1,270 @@
+@page "/settings"
+@using System.Globalization
+@inherits CancellableComponent
+@inject ISettingsService SettingsService
+@inject IHealthService Health
+@inject IModelService Models
+@inject INotificationService Notifications
+
+<PageTitle>Settings · LocalChat</PageTitle>
+
+<div class="page">
+    <div class="page-narrow settings">
+        <h1>Settings</h1>
+
+        <section aria-labelledby="connection-heading">
+            <h2 id="connection-heading">Ollama connection</h2>
+            <div class="connection-row">
+                <FluentTextInput Label="Ollama URL" @bind-Value="_url" Immediate="true" Width="100%" Placeholder="http://localhost:11434"
+                                 MessageCondition="FieldMessages.WhenSet" Message="@_urlError" MessageState="@(_urlError is null ? null : MessageState.Error)" />
+                <div class="connection-actions">
+                    <FluentButton Appearance="ButtonAppearance.Outline" OnClick="TestAsync" Loading="_testing">Test connection</FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Primary" OnClick="SaveUrlAsync" Loading="_saving">Save</FluentButton>
+                </div>
+            </div>
+            @if (_test is { } test)
+            {
+                <p class="@(test.Ok ? "result-ok" : "result-error")" role="status">
+                    @(test.Ok ? $"Connected to Ollama {test.Version}." : $"Couldn't connect: {test.Error}")
+                </p>
+            }
+            @if (_saveNote is not null)
+            {
+                <p class="muted" role="status">@_saveNote</p>
+            }
+        </section>
+
+        <section aria-labelledby="default-heading">
+            <h2 id="default-heading">Default model</h2>
+            <p class="muted">New chats start with this model.</p>
+            @if (AvailableModels.Count == 0)
+            {
+                <p>No model is available. Install one in Ollama, then sync below.</p>
+            }
+            else
+            {
+                <ModelPicker Models="AvailableModels" ModelId="_defaultModelId" OnChanged="SetDefaultAsync" />
+            }
+        </section>
+
+        <section aria-labelledby="models-heading">
+            <div class="section-header">
+                <h2 id="models-heading">Models</h2>
+                <FluentButton Appearance="ButtonAppearance.Outline" OnClick="SyncAsync" Loading="_syncing">Sync from Ollama</FluentButton>
+            </div>
+            @if (_syncSummary is not null)
+            {
+                <p class="muted" role="status">@_syncSummary</p>
+            }
+            <p class="muted hint">
+                The context length is the window sent to Ollama. Larger values use more GPU memory;
+                on a 4 GB card, 4096 to 8192 is the practical range.
+            </p>
+
+            <div class="table-scroll">
+                <table class="models">
+                    <thead>
+                        <tr>
+                            <th scope="col">Display name</th>
+                            <th scope="col">Tag</th>
+                            <th scope="col">Context length</th>
+                            <th scope="col">Max</th>
+                            <th scope="col">Status</th>
+                            <th scope="col"><span class="visually-hidden">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in _rows)
+                        {
+                            <tr @key="row.Model.Id">
+                                <td>
+                                    <FluentTextInput @bind-Value="row.DisplayName" Immediate="true" AriaLabel="@($"Display name of {row.Model.Tag}")" Width="100%"
+                                                     MessageCondition="FieldMessages.WhenSet" Message="@row.ErrorFor(nameof(ModelDto.DisplayName))"
+                                                     MessageState="@row.StateFor(nameof(ModelDto.DisplayName))" />
+                                </td>
+                                <td class="tag">@row.Model.Tag</td>
+                                <td>
+                                    @* Not FluentNumberInput: it loads its input-mask script from unpkg.com. *@
+                                    <FluentTextInput TextInputType="TextInputType.Number" @bind-Value="row.ContextLengthText" Immediate="true"
+                                                     AriaLabel="@($"Context length of {row.Model.Tag}")" Width="120px"
+                                                     MessageCondition="FieldMessages.WhenSet" Message="@row.ErrorFor(nameof(ModelDto.ContextLength))"
+                                                     MessageState="@row.StateFor(nameof(ModelDto.ContextLength))" />
+                                </td>
+                                <td>@(row.Model.MaxContextLength?.ToString("N0") ?? "unknown")</td>
+                                <td>
+                                    @if (row.Model.IsAvailable)
+                                    {
+                                        <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Success">Available</FluentBadge>
+                                    }
+                                    else
+                                    {
+                                        <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Subtle">Unavailable</FluentBadge>
+                                    }
+                                </td>
+                                <td>
+                                    <FluentButton Appearance="ButtonAppearance.Subtle" Disabled="!row.IsChanged" OnClick="() => SaveModelAsync(row)">Save</FluentButton>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+</div>
+
+@code {
+    private string _url = "";
+    private string? _urlError;
+    private ConnectionTest? _test;
+    private string? _saveNote;
+    private string? _syncSummary;
+    private Guid? _defaultModelId;
+    private List<ModelRow> _rows = [];
+    private bool _testing;
+    private bool _saving;
+    private bool _syncing;
+
+    private IReadOnlyList<ModelDto> AvailableModels => _rows.Select(r => r.Model).Where(m => m.IsAvailable).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var settings = await SettingsService.GetAsync(DisposeToken);
+        _url = settings.OllamaBaseUrl;
+        await LoadModelsAsync();
+    }
+
+    // Tests the typed URL, which need not be saved yet.
+    private async Task TestAsync()
+    {
+        _testing = true;
+        _saveNote = null;
+        try
+        {
+            _test = await Health.TestAsync(_url, DisposeToken);
+        }
+        finally
+        {
+            _testing = false;
+        }
+    }
+
+    private async Task SaveUrlAsync()
+    {
+        _saving = true;
+        _test = null;
+        _saveNote = null;
+        try
+        {
+            // Saving also syncs the models from the new URL; the health indicator follows SettingsChanged.
+            await SettingsService.SetOllamaBaseUrlAsync(_url, DisposeToken);
+            _urlError = null;
+            var settings = await SettingsService.GetAsync(DisposeToken);
+            _url = settings.OllamaBaseUrl;
+            var health = await Health.CheckAsync(DisposeToken);
+            _saveNote = health.OllamaReachable
+                ? "Saved. Models were synced from this Ollama."
+                : "Saved, but Ollama isn't reachable at this URL, so models weren't synced.";
+            await LoadModelsAsync();
+        }
+        catch (ValidationException ex)
+        {
+            _urlError = ex.Errors.Values.FirstOrDefault() ?? ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task SetDefaultAsync(Guid modelId)
+    {
+        try
+        {
+            await SettingsService.SetDefaultModelAsync(modelId, DisposeToken);
+            _defaultModelId = modelId;
+        }
+        catch (Exception ex) when (ex.IsServiceError())
+        {
+            await Notifications.ShowErrorAsync(ex);
+        }
+    }
+
+    private async Task SyncAsync()
+    {
+        _syncing = true;
+        try
+        {
+            var result = await Models.SyncAsync(DisposeToken);
+            _syncSummary = $"Synced: {result.Added} added, {result.Updated} updated, {result.MarkedUnavailable} marked unavailable.";
+            await LoadModelsAsync();
+        }
+        catch (OllamaUnavailableException ex)
+        {
+            _syncSummary = ex.Message;
+        }
+        finally
+        {
+            _syncing = false;
+        }
+    }
+
+    private async Task SaveModelAsync(ModelRow row)
+    {
+        if (!int.TryParse(row.ContextLengthText, NumberStyles.None, CultureInfo.InvariantCulture, out var contextLength))
+        {
+            row.Errors = new Dictionary<string, string> { [nameof(ModelDto.ContextLength)] = "Enter a whole number." };
+            return;
+        }
+
+        try
+        {
+            var saved = await Models.UpdateAsync(
+                row.Model.Id,
+                row.DisplayName != row.Model.DisplayName ? row.DisplayName : null,
+                contextLength != row.Model.ContextLength ? contextLength : null,
+                DisposeToken);
+            row.Accept(saved);
+        }
+        catch (ValidationException ex)
+        {
+            row.Errors = ex.Errors;
+        }
+        catch (Exception ex) when (ex.IsServiceError())
+        {
+            await Notifications.ShowErrorAsync(ex);
+        }
+    }
+
+    private async Task LoadModelsAsync()
+    {
+        var models = await Models.ListAsync(includeUnavailable: true, DisposeToken);
+        _rows = models.Select(m => new ModelRow(m)).ToList();
+        var defaultId = (await SettingsService.GetAsync(DisposeToken)).DefaultModelId;
+        _defaultModelId = models.FirstOrDefault(m => m.Id == defaultId && m.IsAvailable)?.Id;
+    }
+
+    /// <summary>One editable row of the models table.</summary>
+    private sealed class ModelRow(ModelDto model)
+    {
+        public ModelDto Model { get; private set; } = model;
+        public string DisplayName { get; set; } = model.DisplayName;
+        public string ContextLengthText { get; set; } = model.ContextLength.ToString(CultureInfo.InvariantCulture);
+        public IReadOnlyDictionary<string, string> Errors { get; set; } = new Dictionary<string, string>();
+
+        public bool IsChanged =>
+            DisplayName != Model.DisplayName || ContextLengthText != Model.ContextLength.ToString(CultureInfo.InvariantCulture);
+
+        public void Accept(ModelDto saved)
+        {
+            Model = saved;
+            DisplayName = saved.DisplayName;
+            ContextLengthText = saved.ContextLength.ToString(CultureInfo.InvariantCulture);
+            Errors = new Dictionary<string, string>();
+        }
+
+        public string? ErrorFor(string field) => Errors.GetValueOrDefault(field);
+
+        public MessageState? StateFor(string field) => Errors.ContainsKey(field) ? MessageState.Error : null;
+    }
+}
