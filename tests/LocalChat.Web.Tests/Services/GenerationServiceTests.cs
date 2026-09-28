@@ -82,6 +82,32 @@ public sealed class GenerationServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Once_the_final_event_is_out_a_new_subscriber_gets_no_snapshot_and_it_no_longer_counts_as_generating()
+    {
+        // The notification after completion is raised before the generation is unregistered. A page that refreshes
+        // on it must not join a reply whose final event it will never receive.
+        var ct = TestContext.Current.CancellationToken;
+        var notifications = 0;
+        GenerationSubscription? late = null;
+        bool? generatingThen = null;
+        _services.Notifier.ConversationsChanged += _ =>
+        {
+            if (++notifications == 2)
+            {
+                generatingThen = Generation.IsGenerating(_conversation.Id);
+                late = Generation.Subscribe(_conversation.Id, _ => Task.CompletedTask);
+            }
+        };
+
+        await Generation.SendAsync(_conversation.Id, "Hi", null, ct);
+        await Generation.WhenIdleAsync();
+
+        Assert.NotNull(late);
+        Assert.Null(late.Snapshot);
+        Assert.False(generatingThen);
+    }
+
+    [Fact]
     public async Task Stop_leaves_the_reply_cancelled_with_the_partial_text_and_no_title()
     {
         var ct = TestContext.Current.CancellationToken;

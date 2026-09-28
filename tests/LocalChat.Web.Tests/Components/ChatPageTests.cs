@@ -23,6 +23,26 @@ public sealed class ChatPageTests : AppTestContext
         Assert.Equal("Hi there", cut.Find(".from-user .user-bubble").TextContent);
         Assert.Equal("Hello there!", cut.Find(".from-assistant.status-complete .markdown").TextContent.Trim());
         Assert.Equal("", cut.Find("textarea.composer-input").GetAttribute("value") ?? "");
+        cut.WaitForAssertion(() => Assert.Equal(["Send (Enter)"], ComposerButtons(cut)));
+    }
+
+    [Fact]
+    public async Task After_each_reply_the_composer_offers_Send_again()
+    {
+        var conversation = await App.Conversations.CreateAsync(ProjectIds.General, null, TestContext.Current.CancellationToken);
+        var cut = Render<Chat>(p => p.Add(x => x.ConversationId, conversation.Id));
+        cut.WaitForAssertion(() => Assert.Equal("New chat", cut.Find(".chat-title h1").TextContent));
+
+        for (var turn = 1; turn <= 3; turn++)
+        {
+            cut.Find("textarea.composer-input").Input($"Message {turn}");
+            await cut.InvokeAsync(() => cut.FindComponents<FluentButton>().Single(b => b.Instance.Title == "Send (Enter)").Instance.OnClick.InvokeAsync());
+            cut.WaitForAssertion(() =>
+            {
+                Assert.Equal(turn * 2, cut.FindAll(".message.status-complete").Count);
+                Assert.Equal(["Send (Enter)"], ComposerButtons(cut));
+            }, TimeSpan.FromSeconds(5));
+        }
     }
 
     [Fact]
@@ -54,6 +74,12 @@ public sealed class ChatPageTests : AppTestContext
         Assert.Equal("3 earlier messages are outside this model's context window.", Chat.TrimmedNote(3));
         await Task.CompletedTask;
     }
+
+    private static List<string?> ComposerButtons(IRenderedComponent<Chat> cut) =>
+        cut.FindComponents<FluentButton>()
+            .Select(b => b.Instance.Title)
+            .Where(t => t is "Send (Enter)" or "Stop generating")
+            .ToList();
 
     private async Task WaitForDeltaAsync(Guid conversationId, string text)
     {

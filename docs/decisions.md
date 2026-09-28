@@ -208,3 +208,8 @@ Format:
 **Context:** `dotnet publish -c Release` must produce a self-contained folder for the current OS, and the published app must run from anywhere.
 **Decision:** The web project sets `SelfContained` and `UseCurrentRuntimeIdentifier` only while publishing (`_IsPublishing`), so builds and tests keep the portable output. `Program.cs` sets the content root to `AppContext.BaseDirectory`, so a published build finds `appsettings.json` and `wwwroot` whatever the working directory; development runs are unaffected. The README documents `-o publish`, the database location on each OS, and how to reset it.
 **Why:** The default content root is the working directory, so starting `./publish/LocalChat.Web` from elsewhere lost its configuration and static files.
+
+## 2026-09-28 · T8 fix · A reply is settled once its final event is out
+**Context:** Bug report: after a reply finished, the composer kept showing Stop. The notification raised after completion comes before the generation is unregistered. A chat page refreshing on it saw `IsGenerating` true, subscribed again, and got a live snapshot of a reply whose final event had already gone out, so it waited forever. Fast models such as llama3.2:3b hit this almost every time.
+**Decision:** Publishing the final event (completed or failed) marks the generation settled under the same lock `Subscribe` takes. From then on `Subscribe` returns no snapshot and `IsGenerating` returns false, even while title generation keeps the subscriber channels open.
+**Why:** Subscribing is only meaningful while the final event is still to come; this closes the window in the service rather than in each caller.

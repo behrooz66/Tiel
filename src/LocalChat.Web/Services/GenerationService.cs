@@ -148,7 +148,8 @@ public sealed class GenerationService : IGenerationService, IHostedService
         }
     }
 
-    public bool IsGenerating(Guid conversationId) => _active.ContainsKey(conversationId);
+    public bool IsGenerating(Guid conversationId) =>
+        _active.TryGetValue(conversationId, out var generation) && !generation.IsSettled;
 
     public GenerationSubscription Subscribe(Guid conversationId, Func<GenerationEvent, Task> onEvent)
     {
@@ -161,7 +162,8 @@ public sealed class GenerationService : IGenerationService, IHostedService
         GenerationSnapshot snapshot;
         lock (generation.Gate)
         {
-            if (generation.Finished)
+            // Once the final event is out, a new subscriber would never receive it: nothing is running for it to join.
+            if (generation.Settled || generation.Finished)
             {
                 return GenerationSubscription.None;
             }
@@ -278,20 +280,20 @@ public sealed class GenerationService : IGenerationService, IHostedService
                 // OllamaSharp ends the stream quietly when cancelled, instead of throwing: that is still a stop.
                 token.ThrowIfCancellationRequested();
                 completed = await SaveFinalAsync(assistant, TextOf(generation), MessageStatus.Complete, null, (int?)outputTokens);
-                Publish(generation, new GenerationCompleted(completed));
+                PublishFinal(generation, new GenerationCompleted(completed));
                 _notifier.NotifyConversationsChanged(projectId);
             }
             catch (Exception) when (token.IsCancellationRequested)
             {
                 // Stopped: whatever the stream threw on the way out (a cancellation or a cut connection) is the stop.
                 var cancelled = await SaveFinalAsync(assistant, TextOf(generation), MessageStatus.Cancelled, null, null);
-                Publish(generation, new GenerationCompleted(cancelled));
+                PublishFinal(generation, new GenerationCompleted(cancelled));
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Generating a reply in conversation {ConversationId} failed.", generation.ConversationId);
                 var failed = await SaveFinalAsync(assistant, TextOf(generation), MessageStatus.Error, Describe(ex), null);
-                Publish(generation, new GenerationFailed(failed));
+                PublishFinal(generation, new GenerationFailed(failed));
             }
             finally
             {
@@ -444,6 +446,10 @@ public sealed class GenerationService : IGenerationService, IHostedService
         }
     }
 
+    /// <summary>Publishes how the reply ended and marks it settled, in one step, so no subscriber can join in between.</summary>
+    private static void PublishFinal(ActiveGeneration generation, GenerationEvent finalEvent) =>
+        Publish(generation, finalEvent, () => generation.Settled = true);
+
     private static string TextOf(ActiveGeneration generation)
     {
         lock (generation.Gate)
@@ -503,6 +509,22 @@ public sealed class GenerationService : IGenerationService, IHostedService
         public List<Channel<GenerationEvent>> Subscribers { get; } = [];
         public Guid AssistantMessageId { get; set; }
         public int TrimmedMessages { get; set; }
+
+        /// <summary>The final event (completed or failed) has been published. Changed under <see cref="Gate"/>.</summary>
+        public bool Settled { get; set; }
+
+        /// <summary>The subscriber channels are completed, after any title. Changed under <see cref="Gate"/>.</summary>
         public bool Finished { get; set; }
+
+        public bool IsSettled
+        {
+            get
+            {
+                lock (Gate)
+                {
+                    return Settled;
+                }
+            }
+        }
     }
 }
