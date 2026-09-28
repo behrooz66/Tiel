@@ -1,4 +1,5 @@
 using LocalChat.Web.Components;
+using LocalChat.Web.Components.Layout;
 using LocalChat.Web.Data;
 using LocalChat.Web.Services;
 using Microsoft.EntityFrameworkCore;
@@ -34,6 +35,7 @@ builder.Services.AddSingleton<ITitleService, TitleService>();
 builder.Services.AddSingleton<GenerationService>();
 builder.Services.AddSingleton<IGenerationService>(services => services.GetRequiredService<GenerationService>());
 builder.Services.AddHostedService(services => services.GetRequiredService<GenerationService>());
+builder.Services.AddScoped<ProjectContext>();
 
 var app = builder.Build();
 

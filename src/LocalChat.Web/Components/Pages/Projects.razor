@@ -1,0 +1,106 @@
+@page "/projects"
+@inherits CancellableComponent
+@inject IProjectService ProjectService
+@inject ChangeNotifier Changes
+@inject IDialogService Dialogs
+@inject INotificationService Notifications
+@inject TimeProvider Time
+
+<PageTitle>Projects · LocalChat</PageTitle>
+
+<div class="page">
+    <div class="page-narrow">
+        <div class="page-header">
+            <h1>Projects</h1>
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="CreateAsync">New project</FluentButton>
+        </div>
+
+        <ul class="project-list">
+            @foreach (var project in _projects)
+            {
+                <li @key="project.Id" class="project-row">
+                    <a class="project-main" href="p/@project.Id">
+                        <span class="project-name">
+                            @project.Name
+                            @if (project.IsGeneral)
+                            {
+                                <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Brand">Default</FluentBadge>
+                            }
+                        </span>
+                        @if (!string.IsNullOrEmpty(project.Description))
+                        {
+                            <span class="project-description">@project.Description</span>
+                        }
+                        <span class="project-meta">@Chats(project.ConversationCount) · updated @RelativeTime.Format(project.UpdatedAt, Time.GetUtcNow().UtcDateTime)</span>
+                    </a>
+                    <div class="project-actions">
+                        <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="() => EditAsync(project)">Edit</FluentButton>
+                        @if (!project.IsGeneral)
+                        {
+                            <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="() => DeleteAsync(project)">Delete</FluentButton>
+                        }
+                    </div>
+                </li>
+            }
+        </ul>
+    </div>
+</div>
+
+@code {
+    private IReadOnlyList<ProjectDto> _projects = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        Changes.ProjectsChanged += OnProjectsChanged;
+        _projects = await ProjectService.ListAsync(DisposeToken);
+    }
+
+    protected override void OnDispose() => Changes.ProjectsChanged -= OnProjectsChanged;
+
+    private Task CreateAsync() => ShowDialogAsync(null);
+
+    private Task EditAsync(ProjectDto project) => ShowDialogAsync(project);
+
+    private async Task ShowDialogAsync(ProjectDto? project)
+    {
+        // The dialog saves through ProjectService itself; the list refreshes from ProjectsChanged.
+        await Dialogs.ShowDialogAsync<ProjectDialog>(options =>
+        {
+            options.Modal = true;
+            options.Parameters.Add(nameof(ProjectDialog.Project), project);
+        });
+    }
+
+    private async Task DeleteAsync(ProjectDto project)
+    {
+        var answer = await Dialogs.ShowConfirmationAsync(
+            DeleteMessage(project.ConversationCount), $"Delete {project.Name}?", "Delete", "Cancel");
+        if (answer.Cancelled)
+        {
+            return;
+        }
+
+        try
+        {
+            await ProjectService.DeleteAsync(project.Id, DisposeToken);
+        }
+        catch (Exception ex) when (ex.IsServiceError())
+        {
+            await Notifications.ShowErrorAsync(ex);
+        }
+    }
+
+    public static string DeleteMessage(int conversationCount) =>
+        $"This permanently deletes the project and its {conversationCount} {(conversationCount == 1 ? "conversation" : "conversations")}.";
+
+    private static string Chats(int count) => count == 1 ? "1 chat" : $"{count} chats";
+
+    private void OnProjectsChanged() => _ = InvokeAsync(async () =>
+    {
+        if (!IsDisposed)
+        {
+            _projects = await ProjectService.ListAsync(DisposeToken);
+            StateHasChanged();
+        }
+    });
+}

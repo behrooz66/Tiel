@@ -1,0 +1,80 @@
+@inherits FluentDialogInstance
+@inject IProjectService Projects
+
+<FluentDialogBody>
+    <div class="project-form">
+        <FluentTextInput Label="Name" @bind-Value="_name" Immediate="true" MaxLength="100" Width="100%"
+                         Autofocus="true" MessageCondition="ShowMessage" Message="@ErrorFor(nameof(ProjectInput.Name))" MessageState="@StateFor(nameof(ProjectInput.Name))" />
+        <FluentTextInput Label="Description" @bind-Value="_description" Immediate="true" MaxLength="500" Width="100%"
+                         MessageCondition="ShowMessage" Message="@ErrorFor(nameof(ProjectInput.Description))" MessageState="@StateFor(nameof(ProjectInput.Description))" />
+        <FluentTextArea Label="Instructions" @bind-Value="_instructions" Immediate="true" Width="100%" Height="180px"
+                        MessageCondition="ShowMessage" Message="@(ErrorFor(nameof(ProjectInput.Instructions)) ?? "Instructions apply to every chat in this project, sent as its system message.")"
+                        MessageState="@StateFor(nameof(ProjectInput.Instructions))" />
+    </div>
+</FluentDialogBody>
+
+@code {
+    private string _name = "";
+    private string _description = "";
+    private string _instructions = "";
+    private IReadOnlyDictionary<string, string> _errors = new Dictionary<string, string>();
+
+    /// <summary>The project to edit, or null to create one.</summary>
+    [Parameter] public ProjectDto? Project { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _name = Project?.Name ?? "";
+        _description = Project?.Description ?? "";
+        _instructions = Project?.Instructions ?? "";
+    }
+
+    protected override void OnInitializeDialog(DialogOptionsHeader header, DialogOptionsFooter footer)
+    {
+        header.Title = Project is null ? "New project" : "Edit project";
+        footer.PrimaryAction.Label = Project is null ? "Create" : "Save";
+        footer.SecondaryAction.Label = "Cancel";
+        footer.SecondaryAction.Visible = true;
+    }
+
+    protected override async Task OnActionClickedAsync(bool primary)
+    {
+        if (!primary)
+        {
+            await DialogInstance.CancelAsync();
+            return;
+        }
+
+        var input = new ProjectInput(_name, _description, _instructions);
+        try
+        {
+            var saved = Project is null
+                ? await Projects.CreateAsync(input, CancellationToken.None)
+                : await Projects.UpdateAsync(Project.Id, input, CancellationToken.None);
+            await DialogInstance.CloseAsync(saved);
+            return;
+        }
+        catch (ValidationException ex)
+        {
+            _errors = ex.Errors;
+        }
+        catch (ConflictException ex)
+        {
+            _errors = new Dictionary<string, string> { [nameof(ProjectInput.Name)] = ex.Message };
+        }
+        catch (NotFoundException ex)
+        {
+            _errors = new Dictionary<string, string> { [nameof(ProjectInput.Name)] = ex.Message };
+        }
+
+        // The click came from the dialog's footer, not from this component, so re-render explicitly.
+        StateHasChanged();
+    }
+
+    // Fluent's default condition for text inputs replaces the message with its own "required" text, so show ours as given.
+    private static readonly Func<IFluentField, bool> ShowMessage = field => field.Message is not null;
+
+    private string? ErrorFor(string field) => _errors.GetValueOrDefault(field);
+
+    private MessageState? StateFor(string field) => _errors.ContainsKey(field) ? MessageState.Error : null;
+}

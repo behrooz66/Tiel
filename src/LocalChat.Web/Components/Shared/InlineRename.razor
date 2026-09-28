@@ -1,0 +1,70 @@
+@* A one-line editor: Enter or leaving the field saves, Escape cancels. The parent decides when it is shown. *@
+<input @ref="_input"
+       class="inline-rename"
+       value="@_draft"
+       maxlength="@MaxLength"
+       aria-label="@AriaLabel"
+       @oninput="e => _draft = e.Value?.ToString() ?? string.Empty"
+       @onkeydown="OnKeyDownAsync"
+       @onblur="SaveAsync" />
+
+@code {
+    private ElementReference _input;
+    private string _draft = "";
+    private bool _finished;
+
+    [Parameter, EditorRequired] public string Value { get; set; } = "";
+    [Parameter] public int MaxLength { get; set; } = 200;
+    [Parameter] public string AriaLabel { get; set; } = "Name";
+    [Parameter] public EventCallback<string> OnSave { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    protected override void OnInitialized() => _draft = Value;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await _input.FocusAsync();
+        }
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await SaveAsync();
+        }
+        else if (e.Key == "Escape")
+        {
+            await CancelAsync();
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_finished)
+        {
+            return;
+        }
+
+        _finished = true;
+        if (_draft.Trim() == Value.Trim())
+        {
+            await OnCancel.InvokeAsync();
+        }
+        else
+        {
+            await OnSave.InvokeAsync(_draft);
+        }
+    }
+
+    private async Task CancelAsync()
+    {
+        if (!_finished)
+        {
+            _finished = true;
+            await OnCancel.InvokeAsync();
+        }
+    }
+}

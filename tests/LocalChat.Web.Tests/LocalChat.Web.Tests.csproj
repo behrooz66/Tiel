@@ -23,6 +23,8 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <!-- bUnit 2 still ships an obsolete Bunit.TestContext; in tests the name means xUnit's. -->
+    <Using Include="Xunit.TestContext" Alias="TestContext" />
   </ItemGroup>
 
 </Project>

@@ -1,0 +1,16 @@
+.project-switcher {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.project-switcher ::deep .manage-projects {
+    align-self: flex-end;
+    font-size: var(--fontSizeBase200);
+    color: var(--colorBrandForeground1);
+    text-decoration: none;
+}
+
+.project-switcher ::deep .manage-projects:hover {
+    text-decoration: underline;
+}

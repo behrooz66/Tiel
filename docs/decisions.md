@@ -160,3 +160,13 @@ Format:
 **Context:** "Service exceptions surface as toasts; an ErrorBoundary catches anything unexpected."
 **Decision:** Components catch only the four typed service exceptions (`IsServiceError()`) and show them with `INotificationService` error toasts. Anything else reaches Blazor's `ErrorBoundary` around the main area, which logs it and shows a calm panel with Try again; navigating also recovers. `wwwroot/js/interop.js` is one ES module with exactly the four allowed concerns. It inserts the code toolbar inside each `<pre>` so the nodes Blazor rendered stay in place. The reconnect dialog keeps the template's mechanics with shorter wording, and says that replies keep generating on the server.
 **Why:** Expected failures get a clear message; bugs aren't hidden behind a toast.
+
+## 2026-09-28 · T10 · Remembering the last project, and confirmations
+**Context:** `/` must reopen "the last-used project (remembered per browser)", and our JavaScript is limited to four uses.
+**Decision:** A scoped `ProjectContext` holds the sidebar's project for each tab and remembers it with ASP.NET Core's `ProtectedLocalStorage`, framework code rather than ours in `interop.js`. An unreadable or stale value falls back to General. Confirmations use Fluent's `IDialogService.ShowConfirmationAsync` instead of a custom `ConfirmDialog` component. The delete message reads "…and its 1 conversation" in the singular.
+**Why:** Per-browser memory with no extra JavaScript, and one fewer component to maintain.
+
+## 2026-09-28 · T10 · Sidebar and dialog details
+**Context:** Details the spec leaves to the implementation.
+**Decision:** One shared Fluent menu (Rename, Delete) opens next to the row's "…" button. Deleting a chat also asks for confirmation. Deleting the chat you are viewing goes to its project's new-chat page; when the current project disappears (here or in another tab), the sidebar switches to General. Relative times are "now", "5m", "3h", "2d", then a date; they refresh every minute. The project dialog passes its own `MessageCondition` to Fluent's inputs, because the default condition replaces any message with "This field is required". `NewChat` exists as a stub until T11 fills it in.
+**Why:** Keeps the sidebar consistent with the data in every tab, and works around a Fluent v5 behavior that hid our field errors.

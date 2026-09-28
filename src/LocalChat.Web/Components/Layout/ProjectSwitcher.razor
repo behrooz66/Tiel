@@ -1,0 +1,22 @@
+<div class="project-switcher">
+    <FluentSelect TOption="ProjectDto" TValue="ProjectDto"
+                  Items="Projects"
+                  Value="Current"
+                  ValueChanged="OnValueChanged"
+                  OptionText="p => p?.Name ?? string.Empty"
+                  OptionValueToString="p => p?.Id.ToString() ?? string.Empty"
+                  AriaLabel="Project"
+                  Width="100%" />
+    <NavLink class="manage-projects" href="projects">Manage projects</NavLink>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<ProjectDto> Projects { get; set; } = [];
+    [Parameter] public Guid ProjectId { get; set; }
+    [Parameter] public EventCallback<Guid> OnSelected { get; set; }
+
+    private ProjectDto? Current => Projects.FirstOrDefault(p => p.Id == ProjectId);
+
+    private Task OnValueChanged(ProjectDto? project) =>
+        project is not null && project.Id != ProjectId ? OnSelected.InvokeAsync(project.Id) : Task.CompletedTask;
+}

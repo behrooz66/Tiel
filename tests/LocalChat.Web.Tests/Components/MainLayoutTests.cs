@@ -1,23 +1,11 @@
 using Bunit;
 using LocalChat.Web.Components.Layout;
-using LocalChat.Web.Services;
 using LocalChat.Web.Tests.Infrastructure;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.FluentUI.AspNetCore.Components;
 
 namespace LocalChat.Web.Tests.Components;
 
-public sealed class MainLayoutTests : BunitContext
+public sealed class MainLayoutTests : AppTestContext
 {
-    public MainLayoutTests()
-    {
-        Services.AddFluentUIComponents();
-        Services.AddSingleton<IHealthService>(new FakeHealthService());
-        Services.AddSingleton<ISettingsService>(new FakeSettingsService());
-        Services.AddSingleton(TimeProvider.System);
-        JSInterop.Mode = JSRuntimeMode.Loose;
-    }
-
     [Fact]
     public void Renders_the_body_inside_main_next_to_the_sidebar()
     {

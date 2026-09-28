@@ -1,0 +1,43 @@
+@page "/p/{ProjectId:guid}"
+@inherits CancellableComponent
+@inject IProjectService Projects
+@inject ProjectContext Context
+
+<PageTitle>New chat · LocalChat</PageTitle>
+
+<div class="page">
+    <div class="page-narrow">
+        @if (_notFound)
+        {
+            <h1>Project not found</h1>
+            <p>It may have been deleted. <a href="p/@ProjectIds.General">Go to General</a></p>
+        }
+        else if (_project is not null)
+        {
+            <h1>New chat</h1>
+            <p class="muted">In @_project.Name</p>
+        }
+    </div>
+</div>
+
+@code {
+    private ProjectDto? _project;
+    private bool _notFound;
+
+    [Parameter] public Guid ProjectId { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            _project = await Projects.GetAsync(ProjectId, DisposeToken);
+            _notFound = false;
+            await Context.SetAsync(ProjectId);
+        }
+        catch (NotFoundException)
+        {
+            _project = null;
+            _notFound = true;
+        }
+    }
+}
