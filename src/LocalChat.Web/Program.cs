@@ -29,6 +29,7 @@ builder.Services.AddSingleton(services => new Lazy<IModelSyncService>(services.G
 builder.Services.AddSingleton<IModelService, ModelService>();
 builder.Services.AddSingleton<ChangeNotifier>();
 builder.Services.AddSingleton<IProjectService, ProjectService>();
+builder.Services.AddSingleton<IConversationService, ConversationService>();
 
 var app = builder.Build();
 

@@ -3,6 +3,7 @@ using LocalChat.Web.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 
 namespace LocalChat.Web.Tests.Infrastructure;
 
@@ -34,9 +35,11 @@ public sealed class TestServices
         Seed = new Seed(database.Factory, Settings, ModelSync, Time, NullLogger<Seed>.Instance);
         Notifier = new ChangeNotifier(NullLogger<ChangeNotifier>.Instance);
         Projects = new ProjectService(database.Factory, Notifier, Time);
+        Conversations = new ConversationService(database.Factory, Settings, Notifier, Time);
     }
 
-    public TimeProvider Time { get; } = TimeProvider.System;
+    /// <summary>Starts at <see cref="TestData.Now"/> and moves only when a test advances it.</summary>
+    public FakeTimeProvider Time { get; } = new(new DateTimeOffset(TestData.Now));
     public FakeOllama Ollama { get; }
     public SettingsService Settings { get; }
     public OllamaClientProvider Clients { get; }
@@ -45,6 +48,7 @@ public sealed class TestServices
     public Seed Seed { get; }
     public ChangeNotifier Notifier { get; }
     public ProjectService Projects { get; }
+    public ConversationService Conversations { get; }
 
     public static IConfiguration Configuration(string? ollamaBaseUrl) =>
         new ConfigurationBuilder()

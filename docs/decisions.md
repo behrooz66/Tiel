@@ -125,3 +125,8 @@ Format:
 **Context:** `ChangeNotifier` handlers belong to UI components and run on the writer's thread.
 **Decision:** Each handler is invoked separately; an exception is logged and the other handlers still run.
 **Why:** A broken component must not turn a successful save into an error.
+
+## 2026-09-28 · T6 · Conversation rules
+**Context:** "The given one, else the default, else the first available" leaves open what happens when the given model is unavailable.
+**Decision:** A given model must exist and be available, or `CreateAsync` throws `ValidationException`. The fallbacks apply only when no model is given. Every model rule error is keyed `ModelId`. Lists sort by `UpdatedAt` newest first, then by id (time-ordered v7), so ties are stable. A rename, model change or system-prompt change that changes nothing is not saved and raises no event. `ConversationDetail.IsGenerating` and stopping a generation before a delete are wired in T8.
+**Why:** Silently swapping the model a user picked would be surprising; the other choices keep lists stable and events meaningful.

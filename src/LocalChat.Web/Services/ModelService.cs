@@ -95,4 +95,20 @@ internal static class ModelQueries
     /// <summary>By display name, ignoring case, then by tag so the order is stable.</summary>
     public static IOrderedQueryable<Model> OrderByDisplayName(this IQueryable<Model> models) =>
         models.OrderBy(m => EF.Functions.Collate(m.DisplayName, "NOCASE")).ThenBy(m => m.Tag);
+
+    /// <summary>
+    /// The model with this id, which must exist and be available: the rule for creating a conversation
+    /// with a model, switching to one, or sending to one.
+    /// </summary>
+    public static async Task<Model> GetAvailableAsync(this IQueryable<Model> models, Guid id, CancellationToken ct)
+    {
+        var model = await models.SingleOrDefaultAsync(m => m.Id == id, ct);
+        return model switch
+        {
+            null => throw new ValidationException("ModelId", "The model does not exist."),
+            { IsAvailable: false } => throw new ValidationException(
+                "ModelId", $"{model.DisplayName} is no longer installed in Ollama. Pick another model."),
+            _ => model,
+        };
+    }
 }

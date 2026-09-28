@@ -1,3 +1,5 @@
+using LocalChat.Web.Data.Entities;
+
 namespace LocalChat.Web.Services;
 
 public record AppSettingsSnapshot(string OllamaBaseUrl, Guid? DefaultModelId);
@@ -14,3 +16,11 @@ public record ProjectInput(string Name, string? Description, string? Instruction
 
 public record ProjectDto(Guid Id, string Name, string? Description, string? Instructions,
     bool IsGeneral, int ConversationCount, DateTime CreatedAt, DateTime UpdatedAt);
+
+public record ConversationSummary(Guid Id, Guid ProjectId, string Title, Guid ModelId, DateTime UpdatedAt);
+
+public record ConversationDetail(Guid Id, Guid ProjectId, string Title, Guid ModelId, string? SystemPrompt,
+    DateTime CreatedAt, DateTime UpdatedAt, bool IsGenerating, IReadOnlyList<MessageDto> Messages);
+
+public record MessageDto(Guid Id, int Sequence, MessageRole Role, string Content, MessageStatus Status,
+    string? ErrorMessage, Guid? ModelId, int? TokenCount, DateTime CreatedAt);
