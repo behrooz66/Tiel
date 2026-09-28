@@ -6,14 +6,16 @@ namespace LocalChat.Web.Tests.Services;
 
 public sealed class HealthServiceTests : IAsyncLifetime
 {
-    private readonly FakeOllama _ollama = new();
     private TestDatabase _database = null!;
+    private FakeOllama _ollama = null!;
     private HealthService _health = null!;
 
     public async ValueTask InitializeAsync()
     {
         _database = await TestDatabase.CreateMigratedAsync();
-        _health = new HealthService(new FakeOllamaClientProvider(_ollama), TestServices.Settings(_database), NullLogger<HealthService>.Instance)
+        var services = new TestServices(_database);
+        _ollama = services.Ollama;
+        _health = new HealthService(services.Clients, services.Settings, NullLogger<HealthService>.Instance)
         {
             Timeout = TimeSpan.FromMilliseconds(200),
         };

@@ -100,3 +100,18 @@ Format:
 **Context:** `SetOllamaBaseUrlAsync` runs a model sync, but the sync is T4's work.
 **Decision:** In the T3 commit it validates, saves and raises `SettingsChanged` only; T4 adds the sync.
 **Why:** One task per commit.
+
+## 2026-09-28 · T4 · Sync semantics
+**Context:** The spec gives the algorithm but not failure handling, timeouts or what "updated" counts.
+**Decision:** A sync is all or nothing: any failed or timed-out Ollama call throws `OllamaUnavailableException` before anything is written, so an unreachable Ollama never marks models unavailable. One sync's Ollama calls share a 30-second timeout, and syncs run one at a time. `SyncResult.Updated` counts existing models whose availability or maximum context actually changed; an unchanged model is not counted and keeps its `UpdatedAt`. The maximum context is read from `<architecture>.context_length` when present, else from the first model-info key ending in `.context_length`. A new model's display name is its tag, cut to 100 characters.
+**Why:** No partial state to reason about, and the summary shows what really changed.
+
+## 2026-09-28 · T4 · Where syncs run and what a failure does
+**Context:** Sync runs at startup, from Settings, and after saving the Ollama URL; the settings service and the sync depend on each other.
+**Decision:** `SettingsService` takes `Lazy<IModelSyncService>` to break the dependency cycle. `SetOllamaBaseUrlAsync` keeps the saved URL when the sync that follows fails, and logs a warning instead of throwing. At startup a failed sync is logged as a warning and the app starts anyway.
+**Why:** Pointing Settings at a wrong URL must work (the health indicator and Test connection report it), and the app must start without Ollama.
+
+## 2026-09-28 · T4 · Model ordering and updates
+**Context:** Models are listed, and the default is picked, "by display name".
+**Decision:** Display-name order ignores case (`COLLATE NOCASE`) and breaks ties by tag. In `ModelService.UpdateAsync` a null argument leaves that field unchanged; a display name is trimmed and must be 1 to 100 characters. All field errors are reported together, and an update that changes nothing does not bump `UpdatedAt`.
+**Why:** Matches what a person expects from an alphabetical list, and the Settings table can show every field error at once.

@@ -16,7 +16,7 @@ public sealed class OllamaClientProviderTests : IAsyncLifetime
     {
         var ct = TestContext.Current.CancellationToken;
         var ollama = new FakeOllama();
-        var settings = TestServices.Settings(_database, ollamaBaseUrl: "http://first-box:11434");
+        var settings = new TestServices(_database, ollamaBaseUrl: "http://first-box:11434").Settings;
         using var provider = new OllamaClientProvider(settings, ollama);
         await (await provider.GetApiClientAsync(ct)).GetVersionAsync(ct);
 
@@ -32,7 +32,7 @@ public sealed class OllamaClientProviderTests : IAsyncLifetime
     public async Task Reuses_one_client_per_url_for_chat_and_api_calls()
     {
         var ct = TestContext.Current.CancellationToken;
-        var settings = TestServices.Settings(_database);
+        var settings = new TestServices(_database).Settings;
         using var provider = new OllamaClientProvider(settings, new FakeOllama());
 
         var api = await provider.GetApiClientAsync(ct);
@@ -47,7 +47,7 @@ public sealed class OllamaClientProviderTests : IAsyncLifetime
     {
         var ct = TestContext.Current.CancellationToken;
         var ollama = new FakeOllama();
-        var settings = TestServices.Settings(_database, ollamaBaseUrl: "http://proxy/ollama");
+        var settings = new TestServices(_database, ollamaBaseUrl: "http://proxy/ollama").Settings;
         using var provider = new OllamaClientProvider(settings, ollama);
 
         await (await provider.GetApiClientAsync(ct)).GetVersionAsync(ct);

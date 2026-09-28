@@ -87,14 +87,16 @@ public sealed class FakeOllama : HttpMessageHandler
 
     private static Dictionary<string, object?> ToShowResponse(FakeOllamaModel model)
     {
-        var modelInfo = new Dictionary<string, object> { ["general.architecture"] = model.Architecture };
+        var modelInfo = new Dictionary<string, object>
+        {
+            ["general.architecture"] = model.Architecture,
+            // Real models also report keys like this one, which is not the maximum. It comes first on purpose.
+            [$"{model.Architecture}.rope.scaling.original_context_length"] = 4096,
+        };
         if (model.MaxContextLength is { } max)
         {
             modelInfo[$"{model.Architecture}.context_length"] = max;
         }
-
-        // Real models also report keys like this one; only ".context_length" is the maximum.
-        modelInfo[$"{model.Architecture}.rope.scaling.original_context_length"] = 4096;
 
         var response = new Dictionary<string, object?>
         {

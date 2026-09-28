@@ -1,4 +1,3 @@
-using System.Text.Json;
 using OllamaSharp;
 
 namespace LocalChat.Web.Services;
@@ -58,7 +57,7 @@ public sealed class HealthService(
         {
             // Checked every 30 seconds per open tab, so failures stay out of the normal log.
             logger.LogDebug(ex, "Ollama at {Url} is unreachable.", client.Uri);
-            return (null, ex is JsonException ? "The server at this URL did not answer like Ollama." : ex.Message);
+            return (null, OllamaUnavailableException.Describe(ex));
         }
     }
 }

@@ -18,7 +18,7 @@ public sealed class SettingsServiceTests : IAsyncLifetime
     [Fact]
     public async Task Missing_rows_return_the_defaults()
     {
-        var settings = TestServices.Settings(_database, ollamaBaseUrl: "http://gpu-box:11434/");
+        var settings = new TestServices(_database, ollamaBaseUrl: "http://gpu-box:11434/").Settings;
 
         var snapshot = await settings.GetAsync(TestContext.Current.CancellationToken);
 
@@ -28,7 +28,7 @@ public sealed class SettingsServiceTests : IAsyncLifetime
     [Fact]
     public async Task Missing_configuration_falls_back_to_the_local_ollama()
     {
-        var settings = TestServices.Settings(_database, ollamaBaseUrl: null);
+        var settings = new TestServices(_database, ollamaBaseUrl: null).Settings;
 
         var snapshot = await settings.GetAsync(TestContext.Current.CancellationToken);
 
@@ -42,7 +42,7 @@ public sealed class SettingsServiceTests : IAsyncLifetime
         await AddRowAsync("Ollama.BaseUrl", "localhost:11434", ct);
         await AddRowAsync("Chat.DefaultModelId", "not-a-guid", ct);
         var logger = new FakeLogger<SettingsService>();
-        var settings = TestServices.Settings(_database, logger);
+        var settings = new TestServices(_database, settingsLogger: logger).Settings;
 
         var snapshot = await settings.GetAsync(ct);
 
@@ -58,7 +58,7 @@ public sealed class SettingsServiceTests : IAsyncLifetime
     {
         var ct = TestContext.Current.CancellationToken;
         var model = await AddModelAsync(isAvailable: true, ct);
-        var settings = TestServices.Settings(_database);
+        var settings = new TestServices(_database).Settings;
         await settings.SetDefaultModelAsync(model.Id, ct);
         Assert.Equal(model.Id.ToString("D"), await ReadRowAsync("Chat.DefaultModelId", ct));
 
@@ -72,7 +72,7 @@ public sealed class SettingsServiceTests : IAsyncLifetime
     public async Task Values_are_cached_until_a_write_which_clears_the_cache_and_raises_SettingsChanged()
     {
         var ct = TestContext.Current.CancellationToken;
-        var settings = TestServices.Settings(_database);
+        var settings = new TestServices(_database).Settings;
         var changes = 0;
         settings.SettingsChanged += () => changes++;
         Assert.Equal("http://localhost:11434", (await settings.GetAsync(ct)).OllamaBaseUrl);
@@ -91,11 +91,40 @@ public sealed class SettingsServiceTests : IAsyncLifetime
     public async Task Saves_the_url_trimmed_and_without_a_trailing_slash()
     {
         var ct = TestContext.Current.CancellationToken;
-        var settings = TestServices.Settings(_database);
+        var settings = new TestServices(_database).Settings;
 
         await settings.SetOllamaBaseUrlAsync("  https://gpu-box:11434/ ", ct);
 
         Assert.Equal("https://gpu-box:11434", await ReadRowAsync("Ollama.BaseUrl", ct));
+    }
+
+    [Fact]
+    public async Task Saving_the_url_runs_a_model_sync_against_the_new_url()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var services = new TestServices(_database);
+        services.Ollama.Models.Add(new FakeOllamaModel("phi4-mini:latest", Capabilities: ["completion"]));
+
+        await services.Settings.SetOllamaBaseUrlAsync("http://gpu-box:11434", ct);
+
+        Assert.Contains(services.Ollama.Requests, u => u.ToString() == "http://gpu-box:11434/api/tags");
+        var model = Assert.Single(await services.Models.ListAsync(includeUnavailable: true, ct));
+        Assert.Equal(model.Id, (await services.Settings.GetAsync(ct)).DefaultModelId);
+    }
+
+    [Fact]
+    public async Task Saving_an_unreachable_url_still_saves_it_and_logs_the_failed_sync()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var logger = new FakeLogger<SettingsService>();
+        var services = new TestServices(_database, settingsLogger: logger);
+        services.Ollama.State = FakeOllamaState.Stopped;
+
+        await services.Settings.SetOllamaBaseUrlAsync("http://wrong-box:11434", ct);
+
+        Assert.Equal("http://wrong-box:11434", (await services.Settings.GetAsync(ct)).OllamaBaseUrl);
+        Assert.Equal(LogLevel.Warning, logger.LatestRecord.Level);
+        Assert.Contains("model sync failed", logger.LatestRecord.Message, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -108,7 +137,7 @@ public sealed class SettingsServiceTests : IAsyncLifetime
     public async Task Rejects_a_url_that_is_not_absolute_http_or_https(string url)
     {
         var ct = TestContext.Current.CancellationToken;
-        var settings = TestServices.Settings(_database);
+        var settings = new TestServices(_database).Settings;
         var changes = 0;
         settings.SettingsChanged += () => changes++;
 
@@ -124,7 +153,7 @@ public sealed class SettingsServiceTests : IAsyncLifetime
     {
         var ct = TestContext.Current.CancellationToken;
         var unavailable = await AddModelAsync(isAvailable: false, ct);
-        var settings = TestServices.Settings(_database);
+        var settings = new TestServices(_database).Settings;
 
         var unknown = await Assert.ThrowsAsync<ValidationException>(() => settings.SetDefaultModelAsync(Guid.CreateVersion7(), ct));
         var notInstalled = await Assert.ThrowsAsync<ValidationException>(() => settings.SetDefaultModelAsync(unavailable.Id, ct));
@@ -139,7 +168,7 @@ public sealed class SettingsServiceTests : IAsyncLifetime
     {
         var ct = TestContext.Current.CancellationToken;
         var logger = new FakeLogger<SettingsService>();
-        var settings = TestServices.Settings(_database, logger, ollamaBaseUrl: "localhost:11434");
+        var settings = new TestServices(_database, ollamaBaseUrl: "localhost:11434", settingsLogger: logger).Settings;
 
         await settings.SeedAsync(ct);
 

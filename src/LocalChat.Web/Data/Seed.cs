@@ -8,6 +8,7 @@ namespace LocalChat.Web.Data;
 public sealed class Seed(
     IDbContextFactory<AppDbContext> dbFactory,
     SettingsService settings,
+    IModelSyncService modelSync,
     TimeProvider time,
     ILogger<Seed> logger)
 {
@@ -37,6 +38,16 @@ public sealed class Seed(
         if (interrupted > 0)
         {
             logger.LogWarning("Marked {Count} interrupted message(s) as failed.", interrupted);
+        }
+
+        // The app must start without Ollama; the Settings page can sync later.
+        try
+        {
+            await modelSync.SyncAsync(ct);
+        }
+        catch (OllamaUnavailableException ex)
+        {
+            logger.LogWarning("Models were not synced at startup: {Error}", ex.Message);
         }
     }
 }

@@ -24,6 +24,9 @@ builder.Services.AddSingleton<SettingsService>();
 builder.Services.AddSingleton<ISettingsService>(services => services.GetRequiredService<SettingsService>());
 builder.Services.AddSingleton<IOllamaClientProvider, OllamaClientProvider>();
 builder.Services.AddSingleton<IHealthService, HealthService>();
+builder.Services.AddSingleton<IModelSyncService, ModelSyncService>();
+builder.Services.AddSingleton(services => new Lazy<IModelSyncService>(services.GetRequiredService<IModelSyncService>));
+builder.Services.AddSingleton<IModelService, ModelService>();
 
 var app = builder.Build();
 

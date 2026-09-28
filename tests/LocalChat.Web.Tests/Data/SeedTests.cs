@@ -2,7 +2,6 @@ using LocalChat.Web.Data;
 using LocalChat.Web.Data.Entities;
 using LocalChat.Web.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace LocalChat.Web.Tests.Data;
 
@@ -27,6 +26,34 @@ public sealed class SeedTests
         var setting = await db.AppSettings.SingleAsync(ct);
         Assert.Equal("Ollama.BaseUrl", setting.Key);
         Assert.Equal("http://localhost:11434", setting.Value);
+    }
+
+    [Fact]
+    public async Task Startup_syncs_the_models_from_ollama()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var app = new LocalChatWebFactory();
+        app.Ollama.Models.Add(new FakeOllamaModel("phi4-mini:latest", Capabilities: ["completion"]));
+        app.Ollama.Models.Add(new FakeOllamaModel("llama3.2:3b", Capabilities: ["completion"], Architecture: "llama"));
+        using var client = app.CreateClient();
+
+        await using var db = app.Database.CreateContext();
+        Assert.Equal(["llama3.2:3b", "phi4-mini:latest"], await db.Models.OrderBy(m => m.Tag).Select(m => m.Tag).ToListAsync(ct));
+    }
+
+    [Fact]
+    public async Task Startup_continues_when_ollama_is_unreachable()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var database = TestDatabase.CreateEmpty();
+        var services = new TestServices(database);
+        services.Ollama.State = FakeOllamaState.Stopped;
+
+        await services.Seed.RunAsync(ct);
+
+        await using var db = database.CreateContext();
+        Assert.Equal(ProjectIds.General, (await db.Projects.SingleAsync(ct)).Id);
+        Assert.Empty(await db.Models.ToListAsync(ct));
     }
 
     [Fact]
@@ -83,5 +110,5 @@ public sealed class SeedTests
     }
 
     private static Seed CreateSeed(TestDatabase database, string ollamaBaseUrl = "http://localhost:11434") =>
-        new(database.Factory, TestServices.Settings(database, ollamaBaseUrl: ollamaBaseUrl), TimeProvider.System, NullLogger<Seed>.Instance);
+        new TestServices(database, ollamaBaseUrl: ollamaBaseUrl).Seed;
 }

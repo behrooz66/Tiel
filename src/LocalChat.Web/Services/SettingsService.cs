@@ -18,9 +18,13 @@ public interface ISettingsService
     event Action? SettingsChanged;
 }
 
-/// <summary>The only reader and writer of the AppSettings table. Values are cached until the next write.</summary>
+/// <summary>
+/// The only reader and writer of the AppSettings table. Values are cached until the next write.
+/// The model sync is resolved lazily because it depends on this service.
+/// </summary>
 public sealed class SettingsService(
     IDbContextFactory<AppDbContext> dbFactory,
+    Lazy<IModelSyncService> modelSync,
     IConfiguration configuration,
     TimeProvider time,
     ILogger<SettingsService> logger) : ISettingsService
@@ -59,6 +63,16 @@ public sealed class SettingsService(
         }
 
         await WriteAsync(definition.Key, definition.Format(normalized), ct);
+
+        // The URL is saved either way: pointing Settings at an unreachable server is allowed, and health shows it.
+        try
+        {
+            await modelSync.Value.SyncAsync(ct);
+        }
+        catch (OllamaUnavailableException ex)
+        {
+            logger.LogWarning("Saved the Ollama URL {Url}, but the model sync failed: {Error}", normalized, ex.Message);
+        }
     }
 
     public async Task SetDefaultModelAsync(Guid? modelId, CancellationToken ct)
