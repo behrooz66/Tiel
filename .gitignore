@@ -1,0 +1,20 @@
+# Build output
+bin/
+obj/
+publish/
+TestResults/
+
+# IDE and OS files
+.vs/
+.idea/
+*.user
+*.suo
+.DS_Store
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
+
+# Personal Claude Code settings
+.claude/settings.local.json

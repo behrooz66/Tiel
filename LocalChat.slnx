@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/LocalChat.Web/LocalChat.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/LocalChat.Web.Tests/LocalChat.Web.Tests.csproj" />
+  </Folder>
+</Solution>
