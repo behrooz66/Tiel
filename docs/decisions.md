@@ -115,3 +115,13 @@ Format:
 **Context:** Models are listed, and the default is picked, "by display name".
 **Decision:** Display-name order ignores case (`COLLATE NOCASE`) and breaks ties by tag. In `ModelService.UpdateAsync` a null argument leaves that field unchanged; a display name is trimmed and must be 1 to 100 characters. All field errors are reported together, and an update that changes nothing does not bump `UpdatedAt`.
 **Why:** Matches what a person expects from an alphabetical list, and the Settings table can show every field error at once.
+
+## 2026-09-28 · T5 · Project writes and events
+**Context:** The spec lists the rules, not the text handling or event details.
+**Decision:** Names are trimmed. Description and instructions are trimmed, and blank ones are stored as null. An update that changes nothing is not saved and raises no event. A project's `UpdatedAt` changes only when the project itself is edited, not when its conversations change. Deleting a project raises `ProjectsChanged` and `ConversationsChanged(projectId)`. A unique-name violation from a concurrent write becomes the same `ConflictException` as the up-front check. Stopping active generations before a delete is wired in T8, when `GenerationService` exists.
+**Why:** The Projects page's "last updated" then means the project's settings, and every tab refreshes both lists after a delete.
+
+## 2026-09-28 · T5 · Change events never fail a write
+**Context:** `ChangeNotifier` handlers belong to UI components and run on the writer's thread.
+**Decision:** Each handler is invoked separately; an exception is logged and the other handlers still run.
+**Why:** A broken component must not turn a successful save into an error.

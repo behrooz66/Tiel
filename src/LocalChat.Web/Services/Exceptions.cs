@@ -30,3 +30,6 @@ public sealed class OllamaUnavailableException(string message, Exception? innerE
     public static string Describe(Exception exception) =>
         exception is JsonException ? "The server at this URL did not answer like Ollama." : exception.Message;
 }
+
+/// <summary>The request conflicts with the current state: a duplicate name, a protected record, or work in progress.</summary>
+public sealed class ConflictException(string message) : Exception(message);

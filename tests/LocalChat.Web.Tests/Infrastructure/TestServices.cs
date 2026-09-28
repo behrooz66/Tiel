@@ -32,6 +32,8 @@ public sealed class TestServices
         };
         Models = new ModelService(database.Factory, ModelSync, Time);
         Seed = new Seed(database.Factory, Settings, ModelSync, Time, NullLogger<Seed>.Instance);
+        Notifier = new ChangeNotifier(NullLogger<ChangeNotifier>.Instance);
+        Projects = new ProjectService(database.Factory, Notifier, Time);
     }
 
     public TimeProvider Time { get; } = TimeProvider.System;
@@ -41,6 +43,8 @@ public sealed class TestServices
     public ModelSyncService ModelSync { get; }
     public ModelService Models { get; }
     public Seed Seed { get; }
+    public ChangeNotifier Notifier { get; }
+    public ProjectService Projects { get; }
 
     public static IConfiguration Configuration(string? ollamaBaseUrl) =>
         new ConfigurationBuilder()

@@ -27,6 +27,8 @@ builder.Services.AddSingleton<IHealthService, HealthService>();
 builder.Services.AddSingleton<IModelSyncService, ModelSyncService>();
 builder.Services.AddSingleton(services => new Lazy<IModelSyncService>(services.GetRequiredService<IModelSyncService>));
 builder.Services.AddSingleton<IModelService, ModelService>();
+builder.Services.AddSingleton<ChangeNotifier>();
+builder.Services.AddSingleton<IProjectService, ProjectService>();
 
 var app = builder.Build();
 
