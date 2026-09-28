@@ -203,3 +203,8 @@ Format:
 **Context:** Details the spec leaves open.
 **Decision:** Test connection checks the typed URL without saving. Save stores it, runs the sync through `SetOllamaBaseUrlAsync`, then checks health once to say whether models were synced or Ollama isn't reachable there. The health indicator re-checks at once through `SettingsChanged`. Each model row has its own Save, enabled only when the row changed, with field errors inline. The default-model picker lists available models only.
 **Why:** Clear feedback for each action, and no half-saved rows.
+
+## 2026-09-28 · T13 · Publishing and the content root
+**Context:** `dotnet publish -c Release` must produce a self-contained folder for the current OS, and the published app must run from anywhere.
+**Decision:** The web project sets `SelfContained` and `UseCurrentRuntimeIdentifier` only while publishing (`_IsPublishing`), so builds and tests keep the portable output. `Program.cs` sets the content root to `AppContext.BaseDirectory`, so a published build finds `appsettings.json` and `wwwroot` whatever the working directory; development runs are unaffected. The README documents `-o publish`, the database location on each OS, and how to reset it.
+**Why:** The default content root is the working directory, so starting `./publish/LocalChat.Web` from elsewhere lost its configuration and static files.

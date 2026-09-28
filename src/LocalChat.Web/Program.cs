@@ -6,7 +6,13 @@ using LocalChat.Web.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.FluentUI.AspNetCore.Components;
 
-var builder = WebApplication.CreateBuilder(args);
+// The app's own folder, not the working directory, so a published build finds appsettings.json and
+// wwwroot wherever it is started from.
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = AppContext.BaseDirectory,
+});
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
