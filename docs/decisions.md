@@ -75,3 +75,28 @@ Format:
 **Context:** Services set `CreatedAt` and `UpdatedAt`; migrations need `dotnet ef`.
 **Decision:** Services take `TimeProvider` (registered as `TimeProvider.System`) instead of calling `DateTime.UtcNow`. `dotnet-ef` 10.0.12 is pinned in the repo's tool manifest (`dotnet-tools.json`); run `dotnet tool restore` after cloning.
 **Why:** Tests can control time where ordering matters, and the EF tool version matches EF Core on any machine.
+
+## 2026-09-28 · T3 · OllamaSharp's source generator is removed from the build
+**Context:** OllamaSharp 5.4.30 ships a source generator built for a newer compiler than SDK 10.0.1xx has. The result is warning CS9057, an error here (warnings as errors). `ExcludeAssets="analyzers"` does not remove it.
+**Decision:** `Directory.Build.targets` removes OllamaSharp's analyzer items before `CoreCompile` in every project. `Microsoft.Extensions.AI` 10.10 is referenced directly (OllamaSharp only pulls 10.8).
+**Why:** The generator only serves `[OllamaTool]` tool calling, which phase 0 excludes. The step is harmless on newer SDKs and can be dropped once the SDK catches up.
+
+## 2026-09-28 · T3 · What "treats a missing or unavailable default model as unset" means
+**Context:** `GetAsync` is "a typed view of all known keys", and values are cached until a write, but model availability changes during sync without a settings write.
+**Decision:** `GetAsync` returns the stored `Chat.DefaultModelId` as parsed and does not check the Models table. Whoever uses the id treats a missing or unavailable model as unset: sync step 5 repairs it, conversation creation falls through to the first available model, and pickers only list available models. `SetDefaultModelAsync` rejects an unknown or unavailable id with `ValidationException` (as "switching to an unknown or unavailable model" does), keyed `DefaultModelId`.
+**Why:** The cache stays a plain cache of the table, and a user's chosen default survives a model disappearing and coming back.
+
+## 2026-09-28 · T3 · Ollama client lifetime and URLs
+**Context:** The spec asks for clients cached per URL and reset on `SettingsChanged`, with no overall timeout on streaming.
+**Decision:** One `OllamaApiClient` per URL serves as both `IChatClient` and `IOllamaApiClient`. All clients share one `SocketsHttpHandler` with a 10-second connect timeout, and `HttpClient.Timeout` is infinite; callers bound calls with their token. URLs are stored trimmed and without trailing slashes; the client adds one slash, so a path prefix such as `http://proxy/ollama` works. Tests reach the real provider through an internal constructor that takes an `HttpMessageHandler`.
+**Why:** A dropped client holds no sockets, so the old one needs no disposal while a reply may still be streaming through it. The connect timeout stops a wrong address from hanging a generation forever without capping the stream.
+
+## 2026-09-28 · T3 · Health and validation details
+**Context:** The spec gives the DTOs, not the error shapes.
+**Decision:** `GET /api/health` always returns 200 with `HealthStatus`; reachability is in the body. Failed checks are logged at Debug, since the sidebar polls every 30 seconds. `TestAsync` reports an invalid URL as a failed test with the validation message instead of throwing, and a server that answers with something other than Ollama's JSON is reported as "did not answer like Ollama". `ValidationException.Errors` maps field names (the DTO property names) to one message each.
+**Why:** Test connection shows one error text either way, and the endpoint stays simple for scripts.
+
+## 2026-09-28 · T3 · Model sync on URL change arrives in T4
+**Context:** `SetOllamaBaseUrlAsync` runs a model sync, but the sync is T4's work.
+**Decision:** In the T3 commit it validates, saves and raises `SettingsChanged` only; T4 adds the sync.
+**Why:** One task per commit.

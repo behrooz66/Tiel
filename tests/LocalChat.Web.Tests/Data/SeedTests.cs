@@ -1,9 +1,7 @@
 using LocalChat.Web.Data;
 using LocalChat.Web.Data.Entities;
-using LocalChat.Web.Services;
 using LocalChat.Web.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace LocalChat.Web.Tests.Data;
@@ -84,12 +82,6 @@ public sealed class SeedTests
         }
     }
 
-    private static Seed CreateSeed(TestDatabase database, string ollamaBaseUrl = "http://localhost:11434")
-    {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["Ollama:BaseUrl"] = ollamaBaseUrl })
-            .Build();
-        var settings = new SettingsService(database.Factory, configuration, TimeProvider.System, NullLogger<SettingsService>.Instance);
-        return new Seed(database.Factory, settings, TimeProvider.System, NullLogger<Seed>.Instance);
-    }
+    private static Seed CreateSeed(TestDatabase database, string ollamaBaseUrl = "http://localhost:11434") =>
+        new(database.Factory, TestServices.Settings(database, ollamaBaseUrl: ollamaBaseUrl), TimeProvider.System, NullLogger<Seed>.Instance);
 }

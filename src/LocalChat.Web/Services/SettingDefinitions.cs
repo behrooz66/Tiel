@@ -42,6 +42,19 @@ public static class SettingDefinitions
                 : FallbackOllamaBaseUrl,
     };
 
+    public static readonly SettingDefinition<Guid?> DefaultModelId = new()
+    {
+        Key = "Chat.DefaultModelId",
+        TryParse = (string text, out Guid? value) =>
+        {
+            var parsed = Guid.TryParseExact(text, "D", out var id);
+            value = parsed ? id : null;
+            return parsed;
+        },
+        Format = value => value?.ToString("D") ?? "",
+        GetDefault = _ => null,
+    };
+
     /// <summary>Trims whitespace and trailing slashes, so equal URLs compare equal.</summary>
     public static string NormalizeUrl(string url) => url.Trim().TrimEnd('/');
 

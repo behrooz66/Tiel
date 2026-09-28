@@ -21,6 +21,9 @@ builder.Services.AddDbContextFactory<AppDbContext>((services, options) =>
 });
 builder.Services.AddSingleton<Seed>();
 builder.Services.AddSingleton<SettingsService>();
+builder.Services.AddSingleton<ISettingsService>(services => services.GetRequiredService<SettingsService>());
+builder.Services.AddSingleton<IOllamaClientProvider, OllamaClientProvider>();
+builder.Services.AddSingleton<IHealthService, HealthService>();
 
 var app = builder.Build();
 
@@ -35,8 +38,7 @@ app.UseAntiforgery();
 
 app.MapStaticAssets();
 
-// Stub until T3 wires it to HealthService.
-app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }));
+app.MapGet("/api/health", (IHealthService health, CancellationToken ct) => health.CheckAsync(ct));
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

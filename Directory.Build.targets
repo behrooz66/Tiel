@@ -1,0 +1,14 @@
+<Project>
+
+  <!--
+    OllamaSharp's source generator (for [OllamaTool], unused in phase 0) needs a newer compiler than
+    SDK 10.0.1xx ships, which is warning CS9057 and so an error here. ExcludeAssets="analyzers" does not
+    remove it, and it reaches every project that references OllamaSharp, even transitively.
+  -->
+  <Target Name="RemoveOllamaSharpSourceGenerator" BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <Analyzer Remove="@(Analyzer)" Condition="'%(Analyzer.NuGetPackageId)' == 'OllamaSharp'" />
+    </ItemGroup>
+  </Target>
+
+</Project>
