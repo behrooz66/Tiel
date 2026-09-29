@@ -92,6 +92,11 @@ Everything is in one SQLite database (with `-wal` and `-shm` files beside it whi
 
 Back it up by copying the file while the app is stopped.
 
+**Coming from LocalChat?** The app used to be called LocalChat and kept its database in a `LocalChat` folder
+(`~/.local/share/LocalChat/localchat.db` on Linux). On the first start as Tiel, if that database exists and there is
+no `tiel.db` yet, the app moves it (with its `-wal` and `-shm` files) to the location above, so your chats carry over.
+Stop any running LocalChat first. A database configured elsewhere with `ConnectionStrings:Tiel` is never moved.
+
 ### Reset
 
 Stop the app, then delete the database files:

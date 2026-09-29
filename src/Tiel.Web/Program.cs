@@ -25,7 +25,8 @@ builder.Services.AddDbContextFactory<AppDbContext>((services, options) =>
         ?? throw new InvalidOperationException("The connection string 'Tiel' is missing.");
     var localApplicationData = Environment.GetFolderPath(
         Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.Create);
-    options.UseSqlite(SqliteConnectionStrings.Resolve(connectionString, localApplicationData));
+    var logger = services.GetRequiredService<ILogger<AppDbContext>>();
+    options.UseSqlite(SqliteConnectionStrings.Resolve(connectionString, localApplicationData, logger));
 });
 builder.Services.AddSingleton<Seed>();
 builder.Services.AddSingleton<SettingsService>();

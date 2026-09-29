@@ -226,3 +226,13 @@ Format:
 - The rename and the move of existing databases (next entry) are separate commits. Git links a renamed file to its history by content similarity, and a file rewritten in the same commit as its move would lose that link.
 
 **Why:** A new name, with every file's history intact.
+
+## 2026-09-29 · Rename · Existing databases move to the new location
+**Context:** Chats made before the rename live in `{LocalApplicationData}/LocalChat/localchat.db`, and the app now opens `{LocalApplicationData}/Tiel/tiel.db`.
+**Decision:** At startup, `SqliteConnectionStrings.Resolve` moves the old database to the new location, but only when:
+- the configured database is the default location;
+- there is no `tiel.db` there yet;
+- `LocalChat/localchat.db` exists.
+
+The `-wal`, `-shm` and `-journal` files move first and the database last, so an interrupted move completes on the next start. The emptied `LocalChat` folder is then removed, and the move is logged. A database configured anywhere else is never moved. The old app must be stopped first, since it would otherwise keep writing to the old path.
+**Why:** Chats carry over without a manual step. Limiting the move to the default location means a test or custom path can never pick up the real database.
