@@ -1,4 +1,4 @@
-# LocalChat
+# Tiel
 
 A private, single-user chat app for local LLMs: a Blazor Web App (interactive server rendering, .NET 10) talking to a local Ollama server, with projects, conversations, messages and settings stored in SQLite.
 
@@ -22,9 +22,9 @@ A private, single-user chat app for local LLMs: a Blazor Web App (interactive se
 ```
 dotnet build
 dotnet test
-dotnet run --project src/LocalChat.Web      # serves http://localhost:5080
-dotnet ef migrations add <Name> --project src/LocalChat.Web
-dotnet publish src/LocalChat.Web -c Release
+dotnet run --project src/Tiel.Web      # serves http://localhost:5080
+dotnet ef migrations add <Name> --project src/Tiel.Web
+dotnet publish src/Tiel.Web -c Release
 ```
 
 ## Architecture rules

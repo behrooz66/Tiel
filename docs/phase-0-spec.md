@@ -6,7 +6,7 @@ Sep 28, 2026 · @Behrooz
 
 Phase 0 delivers a private, single-user chat app that runs entirely on one machine: a Blazor web app (interactive server rendering) talking to a local Ollama server, with projects, conversations, messages and settings persisted in SQLite. It is the foundation that later phases (tools, file uploads, remote access) build on, so structure matters more than polish.
 
-Working name: **LocalChat** (rename freely). Target machine: a laptop with an NVIDIA T1200 (4 GB VRAM). Expect small models in the 2B to 4B range, such as Phi-4-mini or Llama 3.2 3B. The app must also run on macOS and Linux; nothing may be Windows-only.
+Name: **Tiel** (the working name was LocalChat). Target machine: a laptop with an NVIDIA T1200 (4 GB VRAM). Expect small models in the 2B to 4B range, such as Phi-4-mini or Llama 3.2 3B. The app must also run on macOS and Linux; nothing may be Windows-only.
 
 ### In scope
 
@@ -61,12 +61,12 @@ Why interactive server rendering: components run on the server and update the br
 ### Repo layout
 
 ```
-localchat/
+tiel/
   docs/phase-0-spec.md
   docs/decisions.md
-  LocalChat.slnx
+  Tiel.slnx
   README.md
-  src/LocalChat.Web/
+  src/Tiel.Web/
     Program.cs
     appsettings.json
     Components/
@@ -80,7 +80,7 @@ localchat/
                    ModelService, ProjectService, ConversationService, GenerationService,
                    GenerationHub, PromptBuilder, TokenEstimator, TitleService, ChangeNotifier
     wwwroot/       app.css, js/interop.js, lib/highlight/
-  tests/LocalChat.Web.Tests/
+  tests/Tiel.Web.Tests/
 ```
 
 ## Data model
@@ -230,7 +230,7 @@ Yes, phase 0 needs a Settings page, but a small one with three parts: the Ollama
 | Key | Default | Purpose |
 | --- | --- | --- |
 | `Ollama:BaseUrl` | `http://localhost:11434` | First-run seed for `Ollama.BaseUrl`. |
-| `ConnectionStrings:LocalChat` | `Data Source={LocalApplicationData}/LocalChat/localchat.db` | Resolve the folder with `Environment.SpecialFolder.LocalApplicationData` and create it if missing. |
+| `ConnectionStrings:Tiel` | `Data Source={LocalApplicationData}/Tiel/tiel.db` | Resolve the folder with `Environment.SpecialFolder.LocalApplicationData` and create it if missing. |
 | `Urls` | `http://localhost:5080` | Local-only binding. |
 
 Deliberately **not** in settings for phase 0: temperature and other sampling options (Ollama defaults apply), theme (follows the OS), and anything about remote access.
@@ -487,7 +487,7 @@ Done when:
 
 ### T1. Repo scaffold
 
-- Create the layout from **Tech stack and repo layout**: `dotnet new blazor --interactivity Server --all-interactive` as `LocalChat.Web`, an xUnit test project with bUnit, and the solution.
+- Create the layout from **Tech stack and repo layout**: `dotnet new blazor --interactivity Server --all-interactive` as `Tiel.Web`, an xUnit test project with bUnit, and the solution.
 - Turn prerendering off in `App.razor`. Add Fluent UI Blazor and replace the template's pages with an empty `MainLayout`.
 - `Directory.Build.props`: nullable enabled, implicit usings, warnings as errors.
 - Add `.gitignore` (including `*.db`) and `.editorconfig`.
@@ -502,7 +502,7 @@ Done when:
 
 - Entities, `AppDbContext` and configuration exactly as in **Data model**: keys, lengths, unique indexes, `COLLATE NOCASE`, FK delete behaviors, UTC converter, string enums. Register `IDbContextFactory<AppDbContext>`.
 - Initial migration `InitialCreate`.
-- Resolve the database path from `ConnectionStrings:LocalChat` and create the folder.
+- Resolve the database path from `ConnectionStrings:Tiel` and create the folder.
 - Startup seeding and the stale-`Streaming` fix.
 
 Done when (integration tests on a real SQLite file):

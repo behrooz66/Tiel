@@ -1,4 +1,4 @@
-# LocalChat
+# Tiel
 
 A private, single-user chat app for local LLMs. It runs entirely on your machine: a Blazor web app
 (interactive server rendering, .NET 10) talks to a local [Ollama](https://ollama.com) server and keeps
@@ -33,7 +33,7 @@ Works on Linux, macOS and Windows.
 ## Run in development
 
 ```bash
-dotnet run --project src/LocalChat.Web
+dotnet run --project src/Tiel.Web
 ```
 
 Then open <http://localhost:5080>. At startup the app creates the database if needed and syncs the
@@ -45,23 +45,23 @@ Other commands:
 ```bash
 dotnet build
 dotnet test                 # no running Ollama needed; tests use fakes
-dotnet watch --project src/LocalChat.Web
+dotnet watch --project src/Tiel.Web
 dotnet tool restore         # once per clone, for `dotnet ef`
-dotnet ef migrations add <Name> --project src/LocalChat.Web
+dotnet ef migrations add <Name> --project src/Tiel.Web
 ```
 
 ## Publish and run
 
 ```bash
-dotnet publish src/LocalChat.Web -c Release -o publish
+dotnet publish src/Tiel.Web -c Release -o publish
 ```
 
 This produces a self-contained folder for the OS you publish on; the target machine needs neither the
 .NET SDK nor the runtime. Run it from anywhere:
 
 ```bash
-./publish/LocalChat.Web            # Linux and macOS
-publish\LocalChat.Web.exe          # Windows
+./publish/Tiel.Web            # Linux and macOS
+publish\Tiel.Web.exe          # Windows
 ```
 
 It serves the app at <http://localhost:5080>. Stop it with Ctrl+C; replies that are still generating
@@ -75,10 +75,10 @@ are saved as stopped.
 | --- | --- | --- |
 | `Urls` | `http://localhost:5080` | Where the app listens. Keep it on `localhost`: there is no authentication. |
 | `Ollama:BaseUrl` | `http://localhost:11434` | The Ollama URL used on first run. After that, change it in **Settings**, which takes effect without a restart. |
-| `ConnectionStrings:LocalChat` | `Data Source={LocalApplicationData}/LocalChat/localchat.db` | The SQLite database. |
+| `ConnectionStrings:Tiel` | `Data Source={LocalApplicationData}/Tiel/tiel.db` | The SQLite database. |
 
 Each can also be set with an environment variable, for example `Urls=http://localhost:5090` or
-`ConnectionStrings__LocalChat="Data Source=/path/to/chat.db"`.
+`ConnectionStrings__Tiel="Data Source=/path/to/chat.db"`.
 
 ## Where the data lives
 
@@ -86,9 +86,9 @@ Everything is in one SQLite database (with `-wal` and `-shm` files beside it whi
 
 | OS | Location |
 | --- | --- |
-| Linux | `~/.local/share/LocalChat/localchat.db` |
-| macOS | `~/Library/Application Support/LocalChat/localchat.db` |
-| Windows | `%LOCALAPPDATA%\LocalChat\localchat.db` |
+| Linux | `~/.local/share/Tiel/tiel.db` |
+| macOS | `~/Library/Application Support/Tiel/tiel.db` |
+| Windows | `%LOCALAPPDATA%\Tiel\tiel.db` |
 
 Back it up by copying the file while the app is stopped.
 
@@ -97,12 +97,12 @@ Back it up by copying the file while the app is stopped.
 Stop the app, then delete the database files:
 
 ```bash
-rm ~/.local/share/LocalChat/localchat.db*                          # Linux
-rm ~/Library/Application\ Support/LocalChat/localchat.db*          # macOS
+rm ~/.local/share/Tiel/tiel.db*                          # Linux
+rm ~/Library/Application\ Support/Tiel/tiel.db*          # macOS
 ```
 
 ```powershell
-Remove-Item "$env:LOCALAPPDATA\LocalChat\localchat.db*"             # Windows
+Remove-Item "$env:LOCALAPPDATA\Tiel\tiel.db*"             # Windows
 ```
 
 The next start creates an empty database with the General project and syncs the models again.
@@ -111,6 +111,6 @@ The next start creates an empty database with the General project and syncs the 
 
 ```
 docs/                  spec and decisions log
-src/LocalChat.Web/     the app: Components (UI), Services (all rules), Data (EF Core, migrations, seeding)
-tests/LocalChat.Web.Tests/  service tests on temporary SQLite files, bUnit component tests, fakes for Ollama
+src/Tiel.Web/     the app: Components (UI), Services (all rules), Data (EF Core, migrations, seeding)
+tests/Tiel.Web.Tests/  service tests on temporary SQLite files, bUnit component tests, fakes for Ollama
 ```

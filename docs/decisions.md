@@ -23,7 +23,7 @@ Format:
 
 ## 2026-09-28 · T0 · Repo root and docs location
 **Context:** T0 (manual) includes creating the git repo; it did not exist when T1 started, and the spec and decisions log sat at the folder root.
-**Decision:** `git init` in this folder (it plays the role of `localchat/` in the layout), with the spec moved to `docs/phase-0-spec.md` and this log to `docs/decisions.md`, committed as `T0`.
+**Decision:** `git init` in this folder (it plays the role of `tiel/` in the layout), with the spec moved to `docs/phase-0-spec.md` and this log to `docs/decisions.md`, committed as `T0`.
 **Why:** T1 needs a repo to commit to, and `CLAUDE.md` already points at the `docs/` paths.
 
 ## 2026-09-28 · T1 · Restore from nuget.org only
@@ -207,9 +207,22 @@ Format:
 ## 2026-09-28 · T13 · Publishing and the content root
 **Context:** `dotnet publish -c Release` must produce a self-contained folder for the current OS, and the published app must run from anywhere.
 **Decision:** The web project sets `SelfContained` and `UseCurrentRuntimeIdentifier` only while publishing (`_IsPublishing`), so builds and tests keep the portable output. `Program.cs` sets the content root to `AppContext.BaseDirectory`, so a published build finds `appsettings.json` and `wwwroot` whatever the working directory; development runs are unaffected. The README documents `-o publish`, the database location on each OS, and how to reset it.
-**Why:** The default content root is the working directory, so starting `./publish/LocalChat.Web` from elsewhere lost its configuration and static files.
+**Why:** The default content root is the working directory, so starting `./publish/Tiel.Web` from elsewhere lost its configuration and static files.
 
 ## 2026-09-28 · T8 fix · A reply is settled once its final event is out
 **Context:** Bug report: after a reply finished, the composer kept showing Stop. The notification raised after completion comes before the generation is unregistered. A chat page refreshing on it saw `IsGenerating` true, subscribed again, and got a live snapshot of a reply whose final event had already gone out, so it waited forever. Fast models such as llama3.2:3b hit this almost every time.
 **Decision:** Publishing the final event (completed or failed) marks the generation settled under the same lock `Subscribe` takes. From then on `Subscribe` returns no snapshot and `IsGenerating` returns false, even while title generation keeps the subscriber channels open.
 **Why:** Subscribing is only meaningful while the final event is still to come; this closes the window in the service rather than in each caller.
+
+## 2026-09-29 · Rename · LocalChat is now Tiel
+**Context:** The app's working name was LocalChat; it is now Tiel.
+**Decision:**
+- Renamed with `git mv` so history follows the files: `Tiel.slnx`, `src/Tiel.Web`, `tests/Tiel.Web.Tests` and the `Tiel.Web` namespaces.
+- The connection string key is `ConnectionStrings:Tiel`, and the default database is `{LocalApplicationData}/Tiel/tiel.db`.
+- UI titles, the README, `CLAUDE.md` and the docs use the new name, including earlier entries in this log.
+- The EF migration files had their namespaces and entity type names edited by hand, not regenerated. The migration id `20260928195049_InitialCreate` is unchanged, so existing databases apply nothing new.
+- The old key `ConnectionStrings:LocalChat` is no longer read.
+- The browser's remembered last project (now `tiel.lastProject`) starts over once, at General.
+- The rename and the move of existing databases (next entry) are separate commits. Git links a renamed file to its history by content similarity, and a file rewritten in the same commit as its move would lose that link.
+
+**Why:** A new name, with every file's history intact.
