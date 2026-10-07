@@ -39,10 +39,12 @@ public sealed class GenerationService : IGenerationService, IHostedService
 
     private readonly ConcurrentDictionary<Guid, ActiveGeneration> _active = new();
     private readonly ConcurrentDictionary<ActiveGeneration, Task> _running = new();
+    private readonly ConcurrentDictionary<Guid, byte> _summarizing = new();
     private readonly CancellationTokenSource _shutdown = new();
     private readonly IDbContextFactory<AppDbContext> _dbFactory;
     private readonly IOllamaClientProvider _clients;
     private readonly ITitleService _titles;
+    private readonly ISummaryService _summaries;
     private readonly ChangeNotifier _notifier;
     private readonly TimeProvider _time;
     private readonly ILogger<GenerationService> _logger;
@@ -51,6 +53,7 @@ public sealed class GenerationService : IGenerationService, IHostedService
         IDbContextFactory<AppDbContext> dbFactory,
         IOllamaClientProvider clients,
         ITitleService titles,
+        ISummaryService summaries,
         ChangeNotifier notifier,
         TimeProvider time,
         IHostApplicationLifetime lifetime,
@@ -59,6 +62,7 @@ public sealed class GenerationService : IGenerationService, IHostedService
         _dbFactory = dbFactory;
         _clients = clients;
         _titles = titles;
+        _summaries = summaries;
         _notifier = notifier;
         _time = time;
         _logger = logger;
@@ -242,7 +246,8 @@ public sealed class GenerationService : IGenerationService, IHostedService
             try
             {
                 turn = await LoadTurnAsync(generation.ConversationId, assistant, token);
-                var prompt = PromptBuilder.Build(turn.ProjectInstructions, turn.SystemPrompt, turn.Messages, turn.ContextLength);
+                var prompt = PromptBuilder.Build(
+                    turn.ProjectInstructions, turn.SystemPrompt, turn.Messages, turn.ContextLength, turn.Summary);
                 if (prompt.ExceedsBudget)
                 {
                     _logger.LogWarning(
@@ -319,6 +324,59 @@ public sealed class GenerationService : IGenerationService, IHostedService
                 generation.Subscribers.Clear();
             }
         }
+
+        // After the channels close: the summary only shapes later prompts, so nobody waits on it.
+        if (completed is not null && turn is not null)
+        {
+            await UpdateSummaryAsync(generation.ConversationId, turn, completed);
+        }
+    }
+
+    /// <summary>
+    /// Folds the oldest history into the conversation's rolling summary when the next prompt would come close to the
+    /// budget. A failed or late summary changes nothing: the next prompt trims instead, and the next reply tries again.
+    /// </summary>
+    private async Task UpdateSummaryAsync(Guid conversationId, Turn turn, MessageDto completed)
+    {
+        var messages = turn.Messages.Select(m => m.Id == completed.Id ? completed : m).ToList();
+        var plan = PromptBuilder.PlanSummary(turn.ProjectInstructions, turn.SystemPrompt, messages, turn.ContextLength, turn.Summary);
+        // One summary per conversation at a time; a reply that finishes meanwhile leaves it to the next one.
+        if (plan is null || !_summarizing.TryAdd(conversationId, 0))
+        {
+            return;
+        }
+
+        try
+        {
+            var text = await _summaries.SummarizeAsync(
+                turn.ModelTag, turn.ContextLength, turn.Summary?.Text, plan.Messages, plan.MaxTokens, _shutdown.Token);
+            if (text is null)
+            {
+                return;
+            }
+
+            await using var db = await _dbFactory.CreateDbContextAsync(_shutdown.Token);
+            // Only on top of the summary it was built from. Not a user-visible change, so UpdatedAt stays.
+            var previousThrough = turn.Summary?.ThroughSequence ?? 0;
+            var saved = await db.Conversations
+                .Where(c => c.Id == conversationId && c.SummarizedThroughSequence == previousThrough)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(c => c.Summary, text)
+                    .SetProperty(c => c.SummarizedThroughSequence, plan.ThroughSequence), _shutdown.Token);
+            if (saved > 0)
+            {
+                _logger.LogInformation(
+                    "Conversation {ConversationId} is now summarized through message {Sequence}.", conversationId, plan.ThroughSequence);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Updating the summary of conversation {ConversationId} failed.", conversationId);
+        }
+        finally
+        {
+            _summarizing.TryRemove(conversationId, out _);
+        }
     }
 
     private async Task GenerateTitleAsync(ActiveGeneration generation, Guid projectId, Turn turn)
@@ -350,7 +408,7 @@ public sealed class GenerationService : IGenerationService, IHostedService
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
         var conversation = await db.Conversations
             .Where(c => c.Id == conversationId)
-            .Select(c => new { c.Title, c.SystemPrompt, c.Project.Instructions })
+            .Select(c => new { c.Title, c.SystemPrompt, c.Project.Instructions, c.Summary, c.SummarizedThroughSequence })
             .SingleAsync(ct);
         var messages = await db.Messages
             .Where(m => m.ConversationId == conversationId)
@@ -361,8 +419,9 @@ public sealed class GenerationService : IGenerationService, IHostedService
 
         var isFirstReply = conversation.Title == ConversationService.DefaultTitle
             && !messages.Any(m => m.Role == MessageRole.Assistant && m.Status == MessageStatus.Complete);
+        var summary = conversation.Summary is null ? null : new RollingSummary(conversation.Summary, conversation.SummarizedThroughSequence);
         return new Turn(
-            conversation.Instructions, conversation.SystemPrompt, messages, model.Tag, model.ContextLength,
+            conversation.Instructions, conversation.SystemPrompt, summary, messages, model.Tag, model.ContextLength,
             isFirstReply, messages.First(m => m.Role == MessageRole.User).Content);
     }
 
@@ -494,6 +553,7 @@ public sealed class GenerationService : IGenerationService, IHostedService
     private sealed record Turn(
         string? ProjectInstructions,
         string? SystemPrompt,
+        RollingSummary? Summary,
         IReadOnlyList<MessageDto> Messages,
         string ModelTag,
         int ContextLength,

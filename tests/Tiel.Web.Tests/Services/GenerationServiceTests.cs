@@ -374,6 +374,63 @@ public sealed class GenerationServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_short_conversation_is_not_summarized()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        await Generation.SendAsync(_conversation.Id, "Hi", null, ct);
+        await Generation.WhenIdleAsync();
+
+        Assert.Empty(Chat.SummaryRequests);
+        Assert.Equal((null, 0), await ReadSummaryAsync(ct));
+    }
+
+    [Fact]
+    public async Task After_a_reply_old_history_is_folded_into_the_summary_and_the_next_prompt_sends_it_instead()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedLongHistoryAsync(ct);
+
+        await Generation.SendAsync(_conversation.Id, "Next question", null, ct);
+        await Generation.WhenIdleAsync();
+
+        // Budget 384: the history costs 604 after the reply. Folding 1 to 3 leaves 163, under half the budget.
+        Assert.Equal((Chat.SummaryReply, 3), await ReadSummaryAsync(ct));
+        var (summaryMessages, summaryOptions) = Assert.Single(Chat.SummaryRequests);
+        Assert.Equal("phi4-mini:latest", summaryOptions?.ModelId);
+        var transcript = summaryMessages[1].Text;
+        Assert.Contains(new string('a', 500), transcript, StringComparison.Ordinal);
+        Assert.Contains(new string('c', 500), transcript, StringComparison.Ordinal);
+        Assert.DoesNotContain(new string('d', 500), transcript, StringComparison.Ordinal);
+
+        await Generation.SendAsync(_conversation.Id, "Follow-up", null, ct);
+        await Generation.WhenIdleAsync();
+
+        var next = Chat.StreamingRequests.ToList()[^1].Messages;
+        Assert.Equal($"{PromptBuilder.SummaryHeading}\n{Chat.SummaryReply}", next[0].Text);
+        Assert.Equal(
+            [new string('d', 500), "Next question", "Hello there!", "Follow-up"],
+            next.Skip(1).Select(m => m.Text));
+        // The rest fits again, so the summary is left alone.
+        Assert.Single(Chat.SummaryRequests);
+    }
+
+    [Fact]
+    public async Task A_failed_summary_leaves_the_conversation_as_it_was()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedLongHistoryAsync(ct);
+        Chat.SummaryFailWith = new HttpRequestException("Connection refused");
+
+        await Generation.SendAsync(_conversation.Id, "Next question", null, ct);
+        await Generation.WhenIdleAsync();
+
+        Assert.Single(Chat.SummaryRequests);
+        Assert.Equal((null, 0), await ReadSummaryAsync(ct));
+        Assert.Equal(MessageStatus.Complete, (await ReadMessagesAsync(ct))[^1].Status);
+    }
+
+    [Fact]
     public async Task Reports_trimmed_messages_when_the_history_does_not_fit()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -457,6 +514,26 @@ public sealed class GenerationServiceTests : IAsyncLifetime
     {
         await using var db = _database.CreateContext();
         return await db.Messages.AsNoTracking().Where(m => m.ConversationId == _conversation.Id).OrderBy(m => m.Sequence).ToListAsync(ct);
+    }
+
+    /// <summary>A 512 context (budget 384) and four complete 500-character messages of 147 tokens each: a, b, c and d.</summary>
+    private async Task SeedLongHistoryAsync(CancellationToken ct)
+    {
+        await _services.Models.UpdateAsync(_conversation.ModelId, null, 512, ct);
+        await using var db = _database.CreateContext();
+        db.Messages.AddRange(
+            TestData.NewMessage(_conversation.Id, 1, content: new string('a', 500)),
+            TestData.NewMessage(_conversation.Id, 2, MessageRole.Assistant, content: new string('b', 500)),
+            TestData.NewMessage(_conversation.Id, 3, content: new string('c', 500)),
+            TestData.NewMessage(_conversation.Id, 4, MessageRole.Assistant, content: new string('d', 500)));
+        await db.SaveChangesAsync(ct);
+    }
+
+    private async Task<(string? Summary, int Through)> ReadSummaryAsync(CancellationToken ct)
+    {
+        await using var db = _database.CreateContext();
+        var conversation = await db.Conversations.AsNoTracking().SingleAsync(c => c.Id == _conversation.Id, ct);
+        return (conversation.Summary, conversation.SummarizedThroughSequence);
     }
 
     private static async Task EventuallyAsync(Func<Task<bool>> condition)

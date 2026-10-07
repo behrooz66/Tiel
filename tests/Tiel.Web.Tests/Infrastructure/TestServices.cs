@@ -39,8 +39,9 @@ public sealed class TestServices
         Seed = new Seed(database.Factory, Settings, ModelSync, Time, NullLogger<Seed>.Instance);
         Notifier = new ChangeNotifier(NullLogger<ChangeNotifier>.Instance);
         Titles = new TitleService(Clients, NullLogger<TitleService>.Instance) { Timeout = TimeSpan.FromSeconds(2) };
+        Summaries = new SummaryService(Clients, NullLogger<SummaryService>.Instance) { Timeout = TimeSpan.FromSeconds(2) };
         Generation = new GenerationService(
-            database.Factory, Clients, Titles, Notifier, Time, Lifetime, NullLogger<GenerationService>.Instance);
+            database.Factory, Clients, Titles, Summaries, Notifier, Time, Lifetime, NullLogger<GenerationService>.Instance);
         Projects = new ProjectService(database.Factory, Generation, Notifier, Time);
         Conversations = new ConversationService(database.Factory, Settings, Generation, Notifier, Time);
     }
@@ -58,6 +59,7 @@ public sealed class TestServices
     public ProjectService Projects { get; }
     public ConversationService Conversations { get; }
     public TitleService Titles { get; }
+    public SummaryService Summaries { get; }
     public GenerationService Generation { get; }
     public ApplicationLifetime Lifetime { get; } = new(NullLogger<ApplicationLifetime>.Instance);
 

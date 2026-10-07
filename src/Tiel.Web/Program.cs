@@ -40,6 +40,7 @@ builder.Services.AddSingleton<ChangeNotifier>();
 builder.Services.AddSingleton<IProjectService, ProjectService>();
 builder.Services.AddSingleton<IConversationService, ConversationService>();
 builder.Services.AddSingleton<ITitleService, TitleService>();
+builder.Services.AddSingleton<ISummaryService, SummaryService>();
 builder.Services.AddSingleton<GenerationService>();
 builder.Services.AddSingleton<IGenerationService>(services => services.GetRequiredService<GenerationService>());
 builder.Services.AddHostedService(services => services.GetRequiredService<GenerationService>());

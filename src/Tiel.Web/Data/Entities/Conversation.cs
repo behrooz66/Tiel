@@ -7,6 +7,12 @@ public sealed class Conversation
     public Guid ModelId { get; set; }
     public required string Title { get; set; }
     public string? SystemPrompt { get; set; }
+
+    /// <summary>A condensed account of the messages up to <see cref="SummarizedThroughSequence"/>, sent instead of them.</summary>
+    public string? Summary { get; set; }
+
+    /// <summary>The sequence of the last message <see cref="Summary"/> covers; 0 when nothing is summarized.</summary>
+    public int SummarizedThroughSequence { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 

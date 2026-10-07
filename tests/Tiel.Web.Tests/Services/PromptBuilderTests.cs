@@ -116,6 +116,96 @@ public sealed class PromptBuilderTests
     }
 
     [Fact]
+    public void The_summary_closes_the_system_message_and_replaces_the_messages_it_covers()
+    {
+        MessageDto[] conversation = [User("Old question"), Assistant("Old answer"), User("Recent question"), Assistant("Recent answer"), User("Latest")];
+
+        var prompt = PromptBuilder.Build("Rules", "Be brief.", conversation, 4096, new RollingSummary(" They discussed X. ", 2));
+
+        Assert.Equal(
+            ["system: Rules\n\nBe brief.\n\nSummary of the earlier conversation:\nThey discussed X.", "user: Recent question", "assistant: Recent answer", "user: Latest"],
+            prompt.Messages.Select(m => $"{m.Role}: {m.Text}"));
+        Assert.Equal(0, prompt.TrimmedMessages);
+    }
+
+    [Fact]
+    public void A_summary_alone_makes_a_system_message()
+    {
+        MessageDto[] conversation = [User("Old"), Assistant("Reply"), User("Latest")];
+
+        var prompt = PromptBuilder.Build(null, " ", conversation, 4096, new RollingSummary("Earlier: hello.", 2));
+
+        Assert.Equal(["system: Summary of the earlier conversation:\nEarlier: hello.", "user: Latest"], prompt.Messages.Select(m => $"{m.Role}: {m.Text}"));
+    }
+
+    [Fact]
+    public void Only_unsummarized_history_counts_as_trimmed()
+    {
+        // Budget for 512 is 384. The summary costs 20 and each long message 292: only the newer one could fit,
+        // and not with the older one, which is dropped. The summarized messages are not counted.
+        var text = new string('x', 1000);
+        MessageDto[] conversation = [User("a"), Assistant("b"), User("older " + text), Assistant("newer " + text), User("Latest")];
+
+        var prompt = PromptBuilder.Build(null, null, conversation, 512, new RollingSummary("They said a and b.", 2));
+
+        Assert.Equal(1, prompt.TrimmedMessages);
+        Assert.Equal([ChatRole.System, ChatRole.Assistant, ChatRole.User], prompt.Messages.Select(m => m.Role));
+    }
+
+    [Fact]
+    public void No_summary_is_planned_while_the_history_fits_in_three_quarters_of_the_budget()
+    {
+        // Budget for 4096 is 3072; three quarters is 2304. Four 2000-char messages cost 576 each: 2304 in all.
+        var text = new string('x', 2000);
+        MessageDto[] conversation = [User(text), Assistant(text), User(text), Assistant(text)];
+
+        Assert.Null(PromptBuilder.PlanSummary(null, null, conversation, 4096, null));
+    }
+
+    [Fact]
+    public void The_plan_folds_the_oldest_messages_until_the_rest_fits_in_half_the_budget()
+    {
+        // Budget 3072: folding starts above 2304 and stops at 1536 or less. Six messages of 576: 3456.
+        // Folding three leaves 1728, still over; folding four leaves 1152.
+        var text = new string('x', 2000);
+        MessageDto[] conversation = [User(text), Assistant(text), User(text), Assistant(text), User(text), Assistant(text)];
+
+        var plan = PromptBuilder.PlanSummary(null, null, conversation, 4096, null);
+
+        Assert.NotNull(plan);
+        Assert.Equal([1, 2, 3, 4], plan.Messages.Select(m => m.Sequence));
+        Assert.Equal(4, plan.ThroughSequence);
+        Assert.Equal(768, plan.MaxTokens);
+    }
+
+    [Fact]
+    public void The_plan_never_folds_the_last_exchange()
+    {
+        // Two huge messages: over budget, but they are the last exchange, so there is nothing to fold.
+        var text = new string('x', 10_000);
+
+        Assert.Null(PromptBuilder.PlanSummary(null, null, [User(text), Assistant(text)], 4096, null));
+    }
+
+    [Fact]
+    public void The_plan_starts_after_the_current_summary_and_covers_skipped_messages()
+    {
+        var text = new string('x', 2000);
+        MessageDto[] conversation =
+        [
+            User("old"), Assistant("old reply"),
+            User(text), Assistant("", MessageStatus.Error), Assistant(text), User(text), Assistant(text), User(text), Assistant(text),
+        ];
+
+        var plan = PromptBuilder.PlanSummary("Rules", null, conversation, 4096, new RollingSummary("Earlier: old.", 2));
+
+        // The failed reply (4) is not sent to the summarizer, but the new summary covers it.
+        Assert.NotNull(plan);
+        Assert.Equal([3, 5, 6, 7], plan.Messages.Select(m => m.Sequence));
+        Assert.Equal(7, plan.ThroughSequence);
+    }
+
+    [Fact]
     public void A_conversation_without_a_user_message_is_rejected()
     {
         Assert.Throws<ArgumentException>(() => PromptBuilder.Build(null, null, [Assistant("orphan")], 4096));

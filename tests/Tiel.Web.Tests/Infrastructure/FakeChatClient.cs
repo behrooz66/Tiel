@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using Microsoft.Extensions.AI;
+using Tiel.Web.Services;
 
 namespace Tiel.Web.Tests.Infrastructure;
 
@@ -25,8 +26,13 @@ public sealed class FakeChatClient : IChatClient
     public string TitleReply { get; set; } = "Title: \"Greeting the assistant.\"";
     public Exception? TitleFailWith { get; set; }
 
+    /// <summary>The reply to summary calls, told apart from title calls by their system prompt.</summary>
+    public string SummaryReply { get; set; } = "The user greeted the assistant.";
+    public Exception? SummaryFailWith { get; set; }
+
     public ConcurrentQueue<(List<ChatMessage> Messages, ChatOptions? Options)> StreamingRequests { get; } = new();
     public ConcurrentQueue<(List<ChatMessage> Messages, ChatOptions? Options)> TitleRequests { get; } = new();
+    public ConcurrentQueue<(List<ChatMessage> Messages, ChatOptions? Options)> SummaryRequests { get; } = new();
 
     /// <summary>Switches to live mode: every streaming call reads its chunks from the returned channel.</summary>
     public Channel<string> GoLive() => Live = Channel.CreateUnbounded<string>();
@@ -88,10 +94,13 @@ public sealed class FakeChatClient : IChatClient
         ChatOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        TitleRequests.Enqueue((messages.ToList(), options));
-        return TitleFailWith is not null
-            ? Task.FromException<ChatResponse>(TitleFailWith)
-            : Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, TitleReply)));
+        var list = messages.ToList();
+        var isSummary = list.FirstOrDefault()?.Text == SummaryService.SystemPrompt;
+        (isSummary ? SummaryRequests : TitleRequests).Enqueue((list, options));
+        var (reply, failure) = isSummary ? (SummaryReply, SummaryFailWith) : (TitleReply, TitleFailWith);
+        return failure is not null
+            ? Task.FromException<ChatResponse>(failure)
+            : Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, reply)));
     }
 
     public object? GetService(Type serviceType, object? serviceKey = null) => null;
