@@ -30,6 +30,9 @@ public sealed class FakeChatClient : IChatClient
     public string SummaryReply { get; set; } = "The user greeted the assistant.";
     public Exception? SummaryFailWith { get; set; }
 
+    /// <summary>When set, summary calls wait for it before replying.</summary>
+    public TaskCompletionSource? SummaryGate { get; set; }
+
     public ConcurrentQueue<(List<ChatMessage> Messages, ChatOptions? Options)> StreamingRequests { get; } = new();
     public ConcurrentQueue<(List<ChatMessage> Messages, ChatOptions? Options)> TitleRequests { get; } = new();
     public ConcurrentQueue<(List<ChatMessage> Messages, ChatOptions? Options)> SummaryRequests { get; } = new();
@@ -89,7 +92,7 @@ public sealed class FakeChatClient : IChatClient
         }
     }
 
-    public Task<ChatResponse> GetResponseAsync(
+    public async Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages,
         ChatOptions? options = null,
         CancellationToken cancellationToken = default)
@@ -97,10 +100,13 @@ public sealed class FakeChatClient : IChatClient
         var list = messages.ToList();
         var isSummary = list.FirstOrDefault()?.Text == SummaryService.SystemPrompt;
         (isSummary ? SummaryRequests : TitleRequests).Enqueue((list, options));
+        if (isSummary && SummaryGate is { } gate)
+        {
+            await gate.Task.WaitAsync(cancellationToken);
+        }
+
         var (reply, failure) = isSummary ? (SummaryReply, SummaryFailWith) : (TitleReply, TitleFailWith);
-        return failure is not null
-            ? Task.FromException<ChatResponse>(failure)
-            : Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, reply)));
+        return failure is not null ? throw failure : new ChatResponse(new ChatMessage(ChatRole.Assistant, reply));
     }
 
     public object? GetService(Type serviceType, object? serviceKey = null) => null;

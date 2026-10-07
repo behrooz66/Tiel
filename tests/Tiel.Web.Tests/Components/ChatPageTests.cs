@@ -1,6 +1,7 @@
 using Bunit;
 using Tiel.Web.Components.Pages;
 using Tiel.Web.Data;
+using Tiel.Web.Data.Entities;
 using Tiel.Web.Services;
 using Tiel.Web.Tests.Infrastructure;
 using Microsoft.FluentUI.AspNetCore.Components;
@@ -65,6 +66,60 @@ public sealed class ChatPageTests : AppTestContext
 
         live.Writer.Complete();
         cut.WaitForAssertion(() => Assert.Equal("Once upon a time", cut.Find(".status-complete .markdown").TextContent.Trim()));
+    }
+
+    [Fact]
+    public async Task While_a_summary_is_written_the_page_says_so_then_shows_a_divider_a_note_and_the_summary()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var conversation = await App.Conversations.CreateAsync(ProjectIds.General, null, ct);
+        // A 512 context and four 147-token messages: the next reply folds messages 1 to 3 into the summary.
+        await App.Models.UpdateAsync(conversation.ModelId, null, 512, ct);
+        await using (var db = Database.CreateContext())
+        {
+            db.Messages.AddRange(
+                TestData.NewMessage(conversation.Id, 1, content: new string('a', 500)),
+                TestData.NewMessage(conversation.Id, 2, MessageRole.Assistant, content: new string('b', 500)),
+                TestData.NewMessage(conversation.Id, 3, content: new string('c', 500)),
+                TestData.NewMessage(conversation.Id, 4, MessageRole.Assistant, content: new string('d', 500)));
+            await db.SaveChangesAsync(ct);
+        }
+
+        App.Chat.SummaryReply = "They planned a **trip**.";
+        App.Chat.SummaryGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cut = Render<Chat>(p => p.Add(x => x.ConversationId, conversation.Id));
+        cut.WaitForAssertion(() => Assert.Equal(4, cut.FindAll(".message").Count));
+        Assert.Empty(cut.FindAll(".summary-divider"));
+        Assert.Empty(cut.FindAll(".chat-note"));
+
+        cut.Find("textarea.composer-input").Input("Next question");
+        await cut.InvokeAsync(() => cut.FindComponents<FluentButton>().Single(b => b.Instance.Title == "Send (Enter)").Instance.OnClick.InvokeAsync());
+
+        cut.WaitForAssertion(() => Assert.Equal("Summarizing earlier messages…", cut.Find(".summarizing").TextContent.Trim()), TimeSpan.FromSeconds(5));
+        App.Chat.SummaryGate.SetResult();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Empty(cut.FindAll(".summarizing"));
+            Assert.StartsWith("3 earlier messages are summarized for the model.", cut.Find(".chat-note").TextContent.Trim(), StringComparison.Ordinal);
+        }, TimeSpan.FromSeconds(5));
+        // The divider sits between message 3 and message 4.
+        var items = cut.FindAll(".messages > *").Select(e => e.ClassList.Contains("summary-divider") ? "divider" : "message").ToList();
+        Assert.Equal(["message", "message", "message", "divider", "message", "message", "message"], items);
+        Assert.Empty(cut.FindAll(".summary-panel"));
+
+        cut.Find(".chat-note .link-button").Click();
+
+        Assert.Equal("trip", cut.Find(".summary-panel strong").TextContent);
+        Assert.Equal("Hide summary", cut.Find(".chat-note .link-button").TextContent);
+    }
+
+    [Fact]
+    public async Task The_summary_note_counts_the_summarized_messages()
+    {
+        Assert.Equal("1 earlier message is summarized for the model.", Chat.SummaryNote(1));
+        Assert.Equal("5 earlier messages are summarized for the model.", Chat.SummaryNote(5));
+        await Task.CompletedTask;
     }
 
     [Fact]

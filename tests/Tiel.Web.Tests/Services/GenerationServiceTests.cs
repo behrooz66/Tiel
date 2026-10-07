@@ -416,6 +416,35 @@ public sealed class GenerationServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task While_a_summary_is_written_the_chat_reports_it_and_open_pages_hear_about_the_start_and_the_end()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedLongHistoryAsync(ct);
+        Chat.SummaryGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var notifications = 0;
+        _services.Notifier.ConversationsChanged += _ => Interlocked.Increment(ref notifications);
+
+        await Generation.SendAsync(_conversation.Id, "Next question", null, ct);
+        await EventuallyAsync(() => Task.FromResult(Generation.IsSummarizing(_conversation.Id)));
+
+        var during = await _services.Conversations.GetAsync(_conversation.Id, ct);
+        Assert.True(during.IsSummarizing);
+        Assert.False(during.IsGenerating);
+        Assert.Equal((null, 0), (during.Summary, during.SummarizedThroughSequence));
+        var beforeEnd = Volatile.Read(ref notifications);
+
+        Chat.SummaryGate.SetResult();
+        await Generation.WhenIdleAsync();
+
+        var after = await _services.Conversations.GetAsync(_conversation.Id, ct);
+        Assert.False(after.IsSummarizing);
+        Assert.Equal((Chat.SummaryReply, 3), (after.Summary, after.SummarizedThroughSequence));
+        // Send, completion and the summary's start came before; its end comes after the save.
+        Assert.Equal(3, beforeEnd);
+        Assert.Equal(4, notifications);
+    }
+
+    [Fact]
     public async Task A_failed_summary_leaves_the_conversation_as_it_was()
     {
         var ct = TestContext.Current.CancellationToken;

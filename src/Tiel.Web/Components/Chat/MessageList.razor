@@ -6,6 +6,10 @@
         @for (var i = 0; i < Messages.Count; i++)
         {
             var message = Messages[i];
+            @if (i > 0 && message.Sequence > SummarizedThroughSequence && Messages[i - 1].Sequence <= SummarizedThroughSequence)
+            {
+                <div class="summary-divider" role="separator" aria-label="@DividerText"><span>@DividerText</span></div>
+            }
             <MessageView @key="message.Id"
                          Message="message"
                          Content="@(message.Id == StreamingMessageId ? StreamingText : null)"
@@ -34,6 +38,11 @@
     [Parameter] public string? StreamingText { get; set; }
     [Parameter] public IReadOnlyDictionary<Guid, string> ModelNames { get; set; } = new Dictionary<Guid, string>();
     [Parameter] public EventCallback OnRetry { get; set; }
+
+    /// <summary>The model gets a summary instead of the messages up to here; a divider marks the boundary. 0 for none.</summary>
+    [Parameter] public int SummarizedThroughSequence { get; set; }
+
+    public const string DividerText = "Messages above are summarized for the model";
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

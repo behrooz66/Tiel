@@ -230,11 +230,63 @@ h1:focus {
     padding: 8px 20px 16px;
 }
 
-.trim-note {
+.trim-note,
+.chat-note {
     margin: 0 0 6px;
     color: var(--colorNeutralForeground3);
     font-size: var(--fontSizeBase200);
     text-align: center;
+}
+
+.link-button {
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--colorBrandForegroundLink);
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.link-button:hover {
+    color: var(--colorBrandForegroundLinkHover);
+}
+
+.summary-panel {
+    max-height: 40vh;
+    overflow-y: auto;
+    margin: 0 0 8px;
+    padding: 10px 14px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground2);
+    font-size: var(--fontSizeBase200);
+}
+
+.chat-note.summarizing {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.pulse {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--colorNeutralForeground3);
+    animation: pulse 1.2s infinite ease-in-out;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pulse {
+        animation: none;
+    }
 }
 
 @media (max-width: 767.98px) {

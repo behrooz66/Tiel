@@ -51,10 +51,28 @@ else if (_conversation is { } conversation)
 
         <div class="chat-body">
             <MessageList Messages="_messages" StreamingMessageId="_streamingId" StreamingText="@_streamingText.ToString()"
-                         ModelNames="_modelNames" OnRetry="RetryAsync" />
+                         ModelNames="_modelNames" SummarizedThroughSequence="conversation.SummarizedThroughSequence" OnRetry="RetryAsync" />
         </div>
 
         <footer class="chat-footer">
+            @if (_showSummary && conversation.Summary is { } summary)
+            {
+                <div class="summary-panel markdown" role="region" aria-label="Summary of earlier messages">
+                    @MarkdownRenderer.ToHtml(summary)
+                </div>
+            }
+            @if (SummarizedCount > 0)
+            {
+                <p class="chat-note">
+                    @SummaryNote(SummarizedCount)
+                    <button type="button" class="link-button" aria-expanded="@(_showSummary ? "true" : "false")"
+                            @onclick="() => _showSummary = !_showSummary">@(_showSummary ? "Hide summary" : "View summary")</button>
+                </p>
+            }
+            @if (conversation.IsSummarizing)
+            {
+                <p class="chat-note summarizing" role="status"><span class="pulse" aria-hidden="true"></span>Summarizing earlier messages…</p>
+            }
             @if (_trimmed > 0)
             {
                 <p class="trim-note">@TrimmedNote(_trimmed)</p>
@@ -79,12 +97,15 @@ else if (_conversation is { } conversation)
     private bool _notFound;
     private bool _renaming;
     private int _trimmed;
+    private bool _showSummary;
 
     [Parameter] public Guid ConversationId { get; set; }
 
     private IReadOnlyList<ModelDto> AvailableModels => _models.Where(m => m.IsAvailable).ToList();
 
     private ModelDto? CurrentModel => _models.FirstOrDefault(m => m.Id == _conversation?.ModelId);
+
+    private int SummarizedCount => _conversation is { Summary: not null } c ? _messages.Count(m => m.Sequence <= c.SummarizedThroughSequence) : 0;
 
     protected override void OnInitialized()
     {
@@ -109,6 +130,7 @@ else if (_conversation is { } conversation)
         _loadedId = ConversationId;
         EndLiveView();
         _renaming = false;
+        _showSummary = false;
         _trimmed = 0;
         _notFound = false;
         await LoadAsync();
@@ -333,7 +355,7 @@ else if (_conversation is { } conversation)
             return;
         }
 
-        _conversation = _conversation with { Title = detail.Title, ModelId = detail.ModelId, SystemPrompt = detail.SystemPrompt };
+        _conversation = WithSummaryOf(_conversation with { Title = detail.Title, ModelId = detail.ModelId, SystemPrompt = detail.SystemPrompt }, detail);
         if (!_live)
         {
             _messages = [.. detail.Messages];
@@ -352,6 +374,7 @@ else if (_conversation is { } conversation)
         {
             var detail = await Conversations.GetAsync(ConversationId, DisposeToken);
             _messages = [.. detail.Messages];
+            _conversation = _conversation is null ? null : WithSummaryOf(_conversation, detail);
             StateHasChanged();
         }
         catch (NotFoundException)
@@ -384,6 +407,17 @@ else if (_conversation is { } conversation)
             _messages.Sort((a, b) => a.Sequence.CompareTo(b.Sequence));
         }
     }
+
+    private static ConversationDetail WithSummaryOf(ConversationDetail current, ConversationDetail latest) => current with
+    {
+        Summary = latest.Summary,
+        SummarizedThroughSequence = latest.SummarizedThroughSequence,
+        IsSummarizing = latest.IsSummarizing,
+    };
+
+    public static string SummaryNote(int count) => count == 1
+        ? "1 earlier message is summarized for the model."
+        : $"{count} earlier messages are summarized for the model.";
 
     public static string TrimmedNote(int count) => count == 1
         ? "1 earlier message is outside this model's context window."

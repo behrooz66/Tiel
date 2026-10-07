@@ -253,3 +253,13 @@ The `-wal`, `-shm` and `-journal` files move first and the database last, so an 
 - No change to `IGenerationService`, `IConversationService`, the DTOs or the generation events.
 
 **Why:** Hysteresis between three quarters and half of the budget means a summary call every several turns, not every turn, and keeps the start of the prompt stable between summaries so Ollama's prompt cache keeps working. The trade-off: a summary call can make the next reply wait if it is sent at once, because Ollama runs requests for one model in turn.
+
+## 2026-10-07 · T16 (phase 0.1) · The chat shows the summary and its progress
+**Context:** After T15 the model got a summary, but the chat page showed no sign of it. The owner approved a contract change to show it.
+**Decision:**
+- `ConversationDetail` gains `Summary`, `SummarizedThroughSequence` and `IsSummarizing`. `IGenerationService` gains `IsSummarizing(conversationId)`, true while a summary is being written. No generation event was added.
+- `GenerationService` now raises `ConversationsChanged` when a summary starts and again when it ends, saved or not. This replaces T15's "does not raise `ConversationsChanged`". `UpdatedAt` still stays as it was, so the chat does not move in the sidebar, and the sidebar just reloads its list.
+- The chat page picks up all three fields on every refresh. While summarizing, the footer shows "Summarizing earlier messages…" with a pulsing dot (`role="status"`, no animation with reduced motion). It is a note, not a spinner, because nothing is blocked; it only explains why an immediate next reply may start late.
+- Once a summary exists, the footer says "N earlier messages are summarized for the model.", where N counts every message up to the boundary, with a **View summary** toggle. The panel renders the summary with the same safe Markdown pipeline as replies. A dashed divider, "Messages above are summarized for the model", sits before the first message after the boundary.
+
+**Why:** The person reading a long chat can see which messages the model gets word for word, and the summary it gets for the rest.

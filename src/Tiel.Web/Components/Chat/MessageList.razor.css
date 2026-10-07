@@ -31,3 +31,18 @@
     font: inherit;
     cursor: pointer;
 }
+
+.summary-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--colorNeutralForeground3);
+    font-size: var(--fontSizeBase200);
+}
+
+.summary-divider::before,
+.summary-divider::after {
+    content: "";
+    flex: 1;
+    border-top: 1px dashed var(--colorNeutralStroke1);
+}

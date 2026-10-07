@@ -19,8 +19,12 @@ public record ProjectDto(Guid Id, string Name, string? Description, string? Inst
 
 public record ConversationSummary(Guid Id, Guid ProjectId, string Title, Guid ModelId, DateTime UpdatedAt);
 
+/// <param name="Summary">The rolling summary the model gets instead of the messages up to <paramref name="SummarizedThroughSequence"/>.</param>
+/// <param name="SummarizedThroughSequence">0 when nothing is summarized.</param>
+/// <param name="IsSummarizing">A new summary is being written in the background.</param>
 public record ConversationDetail(Guid Id, Guid ProjectId, string Title, Guid ModelId, string? SystemPrompt,
-    DateTime CreatedAt, DateTime UpdatedAt, bool IsGenerating, IReadOnlyList<MessageDto> Messages);
+    string? Summary, int SummarizedThroughSequence,
+    DateTime CreatedAt, DateTime UpdatedAt, bool IsGenerating, bool IsSummarizing, IReadOnlyList<MessageDto> Messages);
 
 public record MessageDto(Guid Id, int Sequence, MessageRole Role, string Content, MessageStatus Status,
     string? ErrorMessage, Guid? ModelId, int? TokenCount, DateTime CreatedAt);

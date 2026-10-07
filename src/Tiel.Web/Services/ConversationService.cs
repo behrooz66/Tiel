@@ -174,7 +174,8 @@ public sealed class ConversationService(
     }
 
     private ConversationDetail ToDetail(Conversation c, IReadOnlyList<MessageDto> messages) =>
-        new(c.Id, c.ProjectId, c.Title, c.ModelId, c.SystemPrompt, c.CreatedAt, c.UpdatedAt, generation.IsGenerating(c.Id), messages);
+        new(c.Id, c.ProjectId, c.Title, c.ModelId, c.SystemPrompt, c.Summary, c.SummarizedThroughSequence,
+            c.CreatedAt, c.UpdatedAt, generation.IsGenerating(c.Id), generation.IsSummarizing(c.Id), messages);
 
     private static NotFoundException NotFound() => new("The conversation does not exist.");
 }

@@ -24,6 +24,9 @@ public interface IGenerationService
 
     bool IsGenerating(Guid conversationId);
 
+    /// <summary>A rolling summary is being written in the background, after a reply.</summary>
+    bool IsSummarizing(Guid conversationId);
+
     /// <summary>Joins the running generation, if any: its snapshot so far, then every later event.</summary>
     GenerationSubscription Subscribe(Guid conversationId, Func<GenerationEvent, Task> onEvent);
 }
@@ -154,6 +157,8 @@ public sealed class GenerationService : IGenerationService, IHostedService
 
     public bool IsGenerating(Guid conversationId) =>
         _active.TryGetValue(conversationId, out var generation) && !generation.IsSettled;
+
+    public bool IsSummarizing(Guid conversationId) => _summarizing.ContainsKey(conversationId);
 
     public GenerationSubscription Subscribe(Guid conversationId, Func<GenerationEvent, Task> onEvent)
     {
@@ -328,15 +333,16 @@ public sealed class GenerationService : IGenerationService, IHostedService
         // After the channels close: the summary only shapes later prompts, so nobody waits on it.
         if (completed is not null && turn is not null)
         {
-            await UpdateSummaryAsync(generation.ConversationId, turn, completed);
+            await UpdateSummaryAsync(generation.ConversationId, projectId, turn, completed);
         }
     }
 
     /// <summary>
     /// Folds the oldest history into the conversation's rolling summary when the next prompt would come close to the
     /// budget. A failed or late summary changes nothing: the next prompt trims instead, and the next reply tries again.
+    /// <c>ConversationsChanged</c> is raised when it starts and when it ends, so an open chat shows the progress and the result.
     /// </summary>
-    private async Task UpdateSummaryAsync(Guid conversationId, Turn turn, MessageDto completed)
+    private async Task UpdateSummaryAsync(Guid conversationId, Guid projectId, Turn turn, MessageDto completed)
     {
         var messages = turn.Messages.Select(m => m.Id == completed.Id ? completed : m).ToList();
         var plan = PromptBuilder.PlanSummary(turn.ProjectInstructions, turn.SystemPrompt, messages, turn.ContextLength, turn.Summary);
@@ -346,6 +352,7 @@ public sealed class GenerationService : IGenerationService, IHostedService
             return;
         }
 
+        _notifier.NotifyConversationsChanged(projectId);
         try
         {
             var text = await _summaries.SummarizeAsync(
@@ -356,7 +363,7 @@ public sealed class GenerationService : IGenerationService, IHostedService
             }
 
             await using var db = await _dbFactory.CreateDbContextAsync(_shutdown.Token);
-            // Only on top of the summary it was built from. Not a user-visible change, so UpdatedAt stays.
+            // Only on top of the summary it was built from. UpdatedAt stays: the chat should not jump up the sidebar.
             var previousThrough = turn.Summary?.ThroughSequence ?? 0;
             var saved = await db.Conversations
                 .Where(c => c.Id == conversationId && c.SummarizedThroughSequence == previousThrough)
@@ -376,6 +383,7 @@ public sealed class GenerationService : IGenerationService, IHostedService
         finally
         {
             _summarizing.TryRemove(conversationId, out _);
+            _notifier.NotifyConversationsChanged(projectId);
         }
     }
 
