@@ -96,7 +96,8 @@ public sealed class PromptBuilderTests
 
     [Theory]
     [InlineData(4096, 3072)]
-    [InlineData(8192, 7168)]
+    [InlineData(8192, 6144)]
+    [InlineData(32768, 24576)]
     [InlineData(2048, 1536)]
     [InlineData(1000, 750)]
     public void The_budget_reserves_room_for_the_answer(int contextLength, int budget)

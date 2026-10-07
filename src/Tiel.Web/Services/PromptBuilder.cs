@@ -16,8 +16,11 @@ public sealed record Prompt(IReadOnlyList<ChatMessage> Messages, int TrimmedMess
 /// <summary>Assembles the request for one turn from the stored conversation. Pure: no I/O, no clock.</summary>
 public static class PromptBuilder
 {
-    /// <summary>The tokens available for the prompt: the context length minus room for the answer.</summary>
-    public static int Budget(int contextLength) => contextLength - Math.Min(1024, contextLength / 4);
+    /// <summary>
+    /// The tokens available for the prompt: the context length minus a quarter of it for the answer.
+    /// The reserve grows with the window, so a thinking model still has room to reason in a long chat.
+    /// </summary>
+    public static int Budget(int contextLength) => contextLength - contextLength / 4;
 
     /// <param name="messages">The conversation in sequence order. Its last user message is the one being answered; anything after it is ignored.</param>
     public static Prompt Build(

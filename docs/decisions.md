@@ -236,3 +236,8 @@ Format:
 
 The `-wal`, `-shm` and `-journal` files move first and the database last, so an interrupted move completes on the next start. The emptied `LocalChat` folder is then removed, and the move is logged. A database configured anywhere else is never moved. The old app must be stopped first, since it would otherwise keep writing to the old path.
 **Why:** Chats carry over without a manual step. Limiting the move to the default location means a test or custom path can never pick up the real database.
+
+## 2026-10-06 · T14 (phase 0.1) · The answer reserve is a quarter of the context
+**Context:** The budget reserved `min(1024, ContextLength / 4)` for the answer. With a large window, such as 32K on a 64 GB Mac, a long chat filled everything except 1024 tokens. A thinking model such as Qwen3 can spend that much reasoning before it starts the answer.
+**Decision:** Budget = `ContextLength − ContextLength / 4`. At 4096 and below nothing changes; at 32K the reserve is 8192. This replaces the spec's formula under **Context trimming**.
+**Why:** The reserve grows with the window, the rule stays one line, and phase 0's small contexts behave exactly as before.
